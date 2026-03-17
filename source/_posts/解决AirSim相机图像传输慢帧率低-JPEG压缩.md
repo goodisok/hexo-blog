@@ -240,7 +240,7 @@ req_jpeg = airsim.ImageRequest("0", airsim.ImageType.Scene, False, False, 90)
 2. **UE 5.7.x**（含 5.7.2）：使用 `IImageWrapper::GetCompressed(quality)` 传质量，不要使用已废弃的 `SetQuality`。
 3. **Stride**：渲染目标可能存在 stride（每行字节数大于 `width*4`），在压缩前已按行拷贝到紧凑的 `src_bmp`，避免 JPEG/PNG 压缩读到多余 padding。
 4. **解码端**：JPEG 返回的是完整 JPEG 文件二进制，客户端用 `cv2.imdecode` 或 PIL 解码即可，无需再区分 RGB/BGR（OpenCV 的 `imdecode` 默认 BGR，与 OpenCV 其他接口一致）。
-5. **Python 路径**：从 `PythonClient` 子目录（如 `multirotor/`）运行脚本时，需在 `import airsim` 前先 `import setup_path`（并视情况用 `sys.path.insert` 把 PythonClient 根目录加入路径），否则会报错找不到 `airsim`。若已通过 `pip install airsim` 安装则无需 setup_path。
+5. **Python 路径**：从 `PythonClient` 子目录（如 `multirotor/`）运行脚本时，需在 `import airsim` 前先 `import setup_path`（并视情况用 `sys.path.insert` 把 PythonClient 根目录加入路径），否则会报错。
 
 ---
 
