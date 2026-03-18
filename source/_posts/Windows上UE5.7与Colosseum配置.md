@@ -18,8 +18,8 @@ UE 5.7 + [goodisok/Colosseum](https://github.com/goodisok/Colosseum) 分支 **`f
 | 项 | 说明 |
 |----|------|
 | Git / CMake / 7-Zip | 均安装；CMake 勾选加入 PATH |
-| UE 5.7 | Epic Launcher 安装（示例 5.7.2）；确认 `Engine\Build\BatchFiles` 存在 |
-| VS 2022 | 工作负载「使用 C++ 的桌面开发」+ Windows 10 SDK + .NET SDK |
+| UE 5.7 | Epic Launcher 安装 |
+| VS 2022 | 使用 C++ 的桌面开发 |
 | 终端 | **Developer Command Prompt for VS 2022**（开始菜单 → Visual Studio 2022） |
 
 ## 克隆（须带子模块）
