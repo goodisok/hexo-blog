@@ -45,7 +45,14 @@ build.cmd
 
 ## 打开环境工程
 
-`build.cmd` 完成后，双击 **`Colosseum\Unreal\Environments\BlocksV2\BlocksV2.uproject`**，用 **UE 5.7** 打开（多版本时选对引擎），进编辑器后 **Play**。原点由关卡 **PlayerStart** 位置/朝向决定。  
+`build.cmd` 完成后，双击 **`Colosseum\Unreal\Environments\BlocksV2\BlocksV2.uproject`**，用 **UE 5.7** 打开（多版本时选对引擎）。**首次**可能出现：
+
+> The following modules are missing or built with a different engine version:  
+> BlocksV2  
+> AirSim  
+> Would you like to rebuild them now?
+
+点击 **Yes**，等待 **BlocksV2** / **AirSim** 重新编译完成后再 **Play**。原点由关卡 **PlayerStart** 位置/朝向决定。  
 `Edit → Editor Preferences` 搜 **CPU**，取消 **Use Less CPU when in Background**。
 
 ## 在其它 UE 场景中使用插件
