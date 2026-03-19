@@ -99,6 +99,12 @@ ignore:
 ## Themes: https://hexo.io/themes/
 theme: landscape
 
+# 数学公式：hexo-filter-katex 在 Markdown 解析前渲染公式，避免被 marked 破坏
+katex:
+  stylesheet_fragment: '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">'
+  render_options:
+    throwOnError: false
+
 # Deployment
 ## Docs: https://hexo.io/docs/one-command-deployment
 ## 部署前需在 GitHub 创建仓库 goodisok.github.io，并配置 SSH 或 token
