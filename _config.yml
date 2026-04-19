@@ -99,6 +99,20 @@ ignore:
 ## Themes: https://hexo.io/themes/
 theme: butterfly
 
+# Feed (RSS/Atom) configuration
+feed:
+  type: atom
+  path: atom.xml
+  limit: 20
+  hub:
+  content: true
+  content_limit: 140
+  content_limit_delim: ' '
+  order_by: -date
+  icon: icon.png
+  autodiscovery: true
+  template:
+
 # 数学公式：hexo-filter-katex 在 Markdown 解析前渲染公式，避免被 marked 破坏
 katex:
   stylesheet_fragment: '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">'
