@@ -110,6 +110,6 @@ katex:
 ## 部署前需在 GitHub 创建仓库 goodisok.github.io，并配置 SSH 或 token
 deploy:
   type: git
-  repo: https://github.com/goodisok/goodisok.github.io.git
+  repo: git@github.com:goodisok/goodisok.github.io.git
   branch: main
   message: 'Deploy Hexo: {{ now("YYYY-MM-DD HH:mm:ss") }}'
