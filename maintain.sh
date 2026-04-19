@@ -59,17 +59,29 @@ case "$1" in
         fi
         ;;
         
+    "rss")
+        echo "检查RSS文件"
+        if [ -f "public/atom.xml" ]; then
+            echo "RSS文件存在，大小: $(wc -c < public/atom.xml) 字节"
+            echo "最后更新: $(stat -c %y public/atom.xml)"
+        else
+            echo "RSS文件不存在，重新生成..."
+            npx hexo clean && npx hexo generate
+        fi
+        ;;
+        
     "status")
         echo "=== 博客状态 ==="
         echo "文章数量: $(find source/_posts -name "*.md" | wc -l)"
         echo "主题: Butterfly"
+        echo "RSS: 已启用 (atom.xml)"
         echo "最后修改: $(git log -1 --format="%cd" --date=short)"
         echo "Git状态:"
         git status --short
         ;;
         
         echo "Hexo博客维护脚本 (Butterfly主题)"
-        echo "用法: $0 {new|serve|deploy|update|backup|theme|config|status}"
+        echo "用法: $0 {new|serve|deploy|update|backup|theme|config|rss|status}"
         echo ""
         echo "命令说明:"
         echo "  new \"标题\"     创建新文章"
@@ -79,6 +91,7 @@ case "$1" in
         echo "  backup         备份博客到GitHub"
         echo "  theme          更新Butterfly主题"
         echo "  config         编辑主题配置"
+        echo "  rss            检查RSS文件状态"
         echo "  status         查看博客状态"
         exit 1
         ;;
