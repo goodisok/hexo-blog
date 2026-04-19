@@ -5,9 +5,9 @@ tags: [AI, 工具, 自动化, 开发, 效率]
 categories: [技术工具]
 ---
 
-# Hermes Agent 完全指南：你的全能AI助手
-
-![Hermes Agent Logo](https://raw.githubusercontent.com/instant-hermes/hermes-agent/main/docs/static/logo.png)
+![Hermes Agent](https://img.shields.io/badge/Hermes-Agent-blue?style=for-the-badge&logo=terminal&logoColor=white)
+![GitHub Stars](https://img.shields.io/github/stars/instant-hermes/hermes-agent?style=flat-square)
+![License](https://img.shields.io/github/license/instant-hermes/hermes-agent?style=flat-square)
 
 ## 引言
 
