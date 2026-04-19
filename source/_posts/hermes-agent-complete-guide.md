@@ -5,10 +5,6 @@ tags: [AI, 工具, 自动化, 开发, 效率]
 categories: [技术工具]
 ---
 
-![Hermes Agent](https://img.shields.io/badge/Hermes-Agent-blue?style=for-the-badge&logo=terminal&logoColor=white)
-![GitHub Stars](https://img.shields.io/github/stars/instant-hermes/hermes-agent?style=flat-square)
-![License](https://img.shields.io/github/license/instant-hermes/hermes-agent?style=flat-square)
-
 ## 引言
 
 在人工智能快速发展的今天，我们见证了各种AI助手的诞生。但大多数AI工具要么功能单一，要么需要复杂的配置。**Hermes Agent** 的出现改变了这一现状——它是一个开源的、功能全面的AI助手，能够在终端中直接运行，帮助你完成从代码开发到日常任务的各种工作。
