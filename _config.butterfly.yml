@@ -62,6 +62,8 @@ code_blocks:
 social:
   fab fa-github: https://github.com/goodisok || GitHub || '#24292e'
   fas fa-envelope: mailto:lcgsmile@qq.com || 邮箱 || '#4a7dbe'
+  fab fa-weixin: /wechat || 微信 || '#07c160'
+  fab fa-qq: /qq || QQ || '#12b7f5'
   fas fa-rss: /atom.xml || RSS || '#ff9800'
 
 # --------------------------------------

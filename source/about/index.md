@@ -48,10 +48,12 @@ layout: page
 
 ## 联系方式
 
-- **GitHub**: [goodisok](https://github.com/goodisok)
+- **GitHub**: [https://github.com/goodisok](https://github.com/goodisok)
 - **邮箱**: lcgsmile@qq.com
-- **博客**: [https://goodisok.github.io](https://goodisok.github.io)
+- **微信**: lcgsmile
+- **QQ**: 2890970082
 
+欢迎通过以上方式联系我，交流技术问题或合作机会。
 ## 博客说明
 
 这个博客使用 [Hexo](https://hexo.io/) 静态博客框架搭建，采用 [Butterfly](https://butterfly.js.org/) 主题。
