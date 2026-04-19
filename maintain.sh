@@ -44,17 +44,32 @@ case "$1" in
         git push origin main
         ;;
         
+    "theme")
+        echo "更新Butterfly主题"
+        npm update hexo-theme-butterfly
+        echo "主题已更新"
+        ;;
+        
+    "config")
+        echo "编辑主题配置"
+        if [ -f "_config.butterfly.yml" ]; then
+            vim _config.butterfly.yml
+        else
+            echo "主题配置文件不存在"
+        fi
+        ;;
+        
     "status")
         echo "=== 博客状态 ==="
         echo "文章数量: $(find source/_posts -name "*.md" | wc -l)"
+        echo "主题: Butterfly"
         echo "最后修改: $(git log -1 --format="%cd" --date=short)"
         echo "Git状态:"
         git status --short
         ;;
         
-    *)
-        echo "Hexo博客维护脚本"
-        echo "用法: $0 {new|serve|deploy|update|backup|status}"
+        echo "Hexo博客维护脚本 (Butterfly主题)"
+        echo "用法: $0 {new|serve|deploy|update|backup|theme|config|status}"
         echo ""
         echo "命令说明:"
         echo "  new \"标题\"     创建新文章"
@@ -62,6 +77,8 @@ case "$1" in
         echo "  deploy         部署到GitHub Pages"
         echo "  update         更新博客(拉取代码+安装依赖)"
         echo "  backup         备份博客到GitHub"
+        echo "  theme          更新Butterfly主题"
+        echo "  config         编辑主题配置"
         echo "  status         查看博客状态"
         exit 1
         ;;
