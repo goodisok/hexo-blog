@@ -1,0 +1,20 @@
+# Minimal Hexo config for testing
+title: Test Blog
+author: goodisok
+language: zh-CN
+
+# Theme
+theme: landscape
+
+# Minimal settings
+url: https://example.com
+root: /
+permalink: :year/:month/:day/:title/
+
+# Disable all plugins except essentials
+feed:
+  enable: false
+
+markdown:
+  render:
+    html: true

@@ -1,0 +1,370 @@
+# --------------------------------------
+# Hexo Butterfly Theme Configuration
+# 针对 goodisok 博客的优化配置
+# --------------------------------------
+
+# --------------------------------------
+# 站点设置
+# --------------------------------------
+
+# 网站图标
+favicon: /favicon.ico
+
+# 网站图标 (苹果)
+apple_touch_icon: /apple-touch-icon.png
+
+# 网站图标 (Android)
+android_touch_icon: /android-chrome-192x192.png
+
+# --------------------------------------
+# 导航设置
+# --------------------------------------
+
+nav:
+  # 导航栏logo图片
+  logo:
+  display_title: true
+  display_post_title: true
+  # 是否固定导航栏
+  fixed: true
+
+# 菜单
+menu:
+  首页: / || fas fa-home
+  归档: /archives/ || fas fa-archive
+  分类: /categories/ || fas fa-folder-open
+  标签: /tags/ || fas fa-tags
+  关于: /about/ || fas fa-user-circle
+
+# --------------------------------------
+# 代码块设置
+# --------------------------------------
+
+code_blocks:
+  # 代码块主题: darker / pale night / light / ocean / false
+  theme: darker
+  macStyle: true
+  # 代码块高度限制 (单位: px)
+  height_limit: 400
+  word_wrap: false
+
+  # 工具栏
+  copy: true
+  language: true
+  # true: 收缩代码块 | false: 展开代码块 | none: 展开代码块并隐藏按钮
+  shrink: false
+  fullpage: false
+
+# --------------------------------------
+# 社交链接
+# --------------------------------------
+
+social:
+  fab fa-github: https://github.com/goodisok || GitHub || '#24292e'
+  fas fa-envelope: mailto:lcgsmile@qq.com || 邮箱 || '#4a7dbe'
+  fab fa-weixin: /wechat || 微信 || '#07c160'
+  fab fa-qq: /qq || QQ || '#12b7f5'
+  fas fa-rss: /atom.xml || RSS || '#ff9800'
+
+# --------------------------------------
+# 侧边栏设置
+# --------------------------------------
+
+aside:
+  # 是否显示侧边栏
+  enable: true
+  # 侧边栏位置: left / right
+  position: right
+  # 是否在移动设备上显示侧边栏
+  mobile: true
+  # 侧边栏显示项目
+  card_author:
+    enable: true
+    description: 技术爱好者，喜欢探索新技术
+  card_announcement:
+    enable: true
+    content: 欢迎来到我的技术博客！
+  card_recent_post:
+    enable: true
+    limit: 5
+  card_categories:
+    enable: true
+    limit: 8
+  card_tags:
+    enable: true
+    limit: 20
+  card_archives:
+    enable: true
+    type: monthly
+    limit: 8
+  card_webinfo:
+    enable: true
+
+# --------------------------------------
+# 文章设置
+# --------------------------------------
+
+post:
+  # 文章封面
+  cover:
+    # 默认封面
+    default_cover:
+      - https://source.unsplash.com/random/1920x1080/?technology,code
+      - https://source.unsplash.com/random/1920x1080/?programming,computer
+      - https://source.unsplash.com/random/1920x1080/?developer,workspace
+  
+  # 文章元信息
+  meta:
+    date_type: created
+    categories: true
+    tags: true
+    update_date: true
+  
+  # 文章版权
+  copyright:
+    enable: true
+    license: CC BY-NC-SA 4.0
+    license_url: https://creativecommons.org/licenses/by-nc-sa/4.0/
+  
+  # 文章目录
+  toc:
+    enable: true
+    number: true
+    expand: false
+    style_simple: false
+  
+  # 推荐文章
+  recommend:
+    enable: true
+    limit: 6
+  
+  # 相关文章
+  related:
+    enable: true
+    limit: 6
+
+# --------------------------------------
+# 评论系统
+# --------------------------------------
+
+# 暂时禁用评论
+comments:
+  use: false
+
+# --------------------------------------
+# 搜索
+# --------------------------------------
+
+search:
+  enable: true
+  # 搜索引擎: local / algolia
+  type: local
+  # 搜索框占位符
+  placeholder: 搜索文章...
+  # 搜索热键
+  hotkey: true
+
+# --------------------------------------
+# 数学公式
+# --------------------------------------
+
+math:
+  enable: true
+  # 默认 (true) 将会加载 mathjax / katex 脚本
+  # false 时则不会加载
+  per_page: true
+
+  # 如果设置 per_page: false 则需要在这里指定哪些页面需要加载数学公式
+  include:
+    page: false
+    post: true
+    home: false
+    archive: false
+    category: false
+    tag: false
+
+  # 引擎: mathjax / katex
+  engine: katex
+
+# --------------------------------------
+# 页脚设置
+# --------------------------------------
+
+footer:
+  # 页脚是否居中
+  center: true
+  
+  # 页脚自定义文本
+  custom_text: 
+  
+  # 版权信息
+  copyright:
+    enable: true
+    # 显示年份
+    since: 2026
+  
+  # 网站运行时间
+  runtime:
+    enable: true
+    launch_time: "04/19/2026 00:00:00"
+  
+  # ICP备案
+  beian:
+    enable: false
+    icp:
+
+# --------------------------------------
+# 暗黑模式
+# --------------------------------------
+
+darkmode:
+  enable: true
+  # 切换按钮
+  button: true
+  # 自动切换根据系统设置
+  autoChangeMode: true
+
+# --------------------------------------
+# 动画效果
+# --------------------------------------
+
+animate:
+  enable: true
+  # 动画库: animate.css / wow.js
+  library: animate.css
+  # 动画设置
+  config:
+    # 入场动画
+    in:
+      # 文章卡片
+      post_card: fadeInUp
+      # 侧边栏卡片
+      aside_card: fadeInUp
+    # 出场动画
+    out:
+      # 文章卡片
+      post_card: fadeOutDown
+      # 侧边栏卡片
+      aside_card: fadeOutDown
+
+# --------------------------------------
+# 字体设置
+# --------------------------------------
+
+font:
+  # 全局字体
+  global-font-size: 16px
+  # 代码字体
+  code-font-size: 14px
+  # 字体族
+  font-family: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+  # 代码字体族
+  code-font-family: "Consolas, Monaco, Andale Mono, Ubuntu Mono, monospace"
+
+# --------------------------------------
+# 颜色主题
+# --------------------------------------
+
+theme_color:
+  enable: true
+  # 主颜色
+  main: "#49b1f5"
+  # 页面加载进度条颜色
+  paginator: "#00c4b6"
+  # 按钮悬停颜色
+  button_hover: "#ff7242"
+  # 文本选择颜色
+  text_selection: "#00c4b6"
+  # 链接颜色
+  link_color:
+    enable: true
+    # 常规链接颜色
+    normal: "#99a9bf"
+    # 悬停链接颜色
+    hover: "#49b1f5"
+
+# --------------------------------------
+# 背景效果
+# --------------------------------------
+
+background:
+  # 是否启用背景
+  enable: true
+  # 背景类型: color / image / slideshow
+  type: color
+  # 背景颜色
+  color: "#f5f5f5"
+  # 背景图片
+  image:
+    # 默认背景图片
+    default: https://source.unsplash.com/random/1920x1080/?nature,landscape
+    # 移动端背景图片
+    mobile: https://source.unsplash.com/random/1080x1920/?nature,landscape
+  # 背景幻灯片
+  slideshow:
+    enable: false
+
+# --------------------------------------
+# PWA (渐进式Web应用)
+# --------------------------------------
+
+pwa:
+  enable: false
+
+# --------------------------------------
+# 性能优化
+# --------------------------------------
+
+performance:
+  # 图片懒加载
+  lazyload:
+    enable: true
+    # 加载占位符
+    placeholder: data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PC9zdmc+
+    # 加载错误占位符
+    error_img: /images/loading-error.svg
+  
+  # 预加载
+  preload:
+    enable: true
+  
+  # CDN加速
+  cdn:
+    enable: false
+
+# --------------------------------------
+# 其他设置
+# --------------------------------------
+
+# 打赏
+reward:
+  enable: false
+
+# 分享
+share:
+  enable: true
+  # 分享平台
+  platforms:
+    - twitter
+    - facebook
+    - linkedin
+    - telegram
+    - wechat
+    - weibo
+    - qq
+
+# 访问统计
+busuanzi:
+  enable: false
+
+# 谷歌分析
+google_analytics:
+  enable: false
+
+# 百度统计
+baidu_analytics:
+  enable: false
+
+# 不蒜子统计
+visit_count:
+  enable: false

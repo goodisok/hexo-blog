@@ -1,0 +1,30 @@
+# Minimal Hexo Configuration
+title: goodisok 的博客
+subtitle: ''
+description: ''
+author: goodisok
+language: zh-CN
+timezone: 'Asia/Shanghai'
+
+# URL
+url: https://goodisok.github.io
+root: /
+permalink: :year/:month/:day/:title/
+
+# Directory
+source_dir: source
+public_dir: public
+
+# Writing
+new_post_name: :title.md
+default_layout: post
+
+# Theme
+theme: landscape
+
+# Minimal deployment
+deploy:
+  type: git
+  repo: git@github.com:goodisok/goodisok.github.io.git
+  branch: main
+  message: 'Deploy Hexo: {{ now("YYYY-MM-DD HH:mm:ss") }}'
