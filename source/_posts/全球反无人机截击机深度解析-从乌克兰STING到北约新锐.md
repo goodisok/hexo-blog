@@ -1,5 +1,5 @@
 ---
-title: 全球反无人机截击机深度解析：从乌克兰 STING 到北约新锐，八款主流系统技术对比
+title: 全球反无人机截击机深度解析：从乌克兰 STING 到北约新锐，十四款主流系统技术全览
 date: 2026-04-21 20:00:00
 categories:
   - 无人机
@@ -13,6 +13,11 @@ tags:
   - BLAZE
   - DroneHunter
   - Anvil
+  - Skyhammer
+  - Coyote
+  - Iron Drone
+  - Hunter Eagle
+  - Cicada
   - 无人机战争
   - 乌克兰
   - 北约
@@ -20,7 +25,7 @@ tags:
 mathjax: false
 ---
 
-> 当一枚造价 3.5 万美元的 Shahed 自杀无人机可以迫使防御方发射一枚数十万美元的防空导弹时，战争经济学就已经倒向了攻击方。截击无人机——用无人机拦截无人机——正在改写这一等式。本文基于公开源码、官方技术手册和战场验证数据，深度分析全球八款主流截击无人机系统。
+> 当一枚造价 3.5 万美元的 Shahed 自杀无人机可以迫使防御方发射一枚数十万美元的防空导弹时，战争经济学就已经倒向了攻击方。截击无人机——用无人机拦截无人机——正在改写这一等式。本文基于公开源码、官方技术手册和战场验证数据，深度分析全球十四款主流截击无人机系统，涵盖乌克兰、法国、美国、英国、以色列、拉脱维亚、德国、瑞士等八个国家的产品。
 
 ---
 
@@ -331,24 +336,256 @@ Destinus Hornet 采用渐进式发展路线，目前有三个主要变体：
 
 ---
 
-## 九、综合对比：全球八款截击无人机参数一览
+## 九、英国 Cambridge Aerospace Skyhammer——闪电采购的涡喷拦截弹
 
-| 型号 | 国家 | 速度 | 射程 | 重量 | 毁伤方式 | 单价 | 实战验证 |
-|------|------|------|------|------|---------|------|---------|
-| **STING** | 乌克兰 | 343 km/h | 25 km | — | 动能+爆炸 | $2,100 | 击落 3,900+ |
-| **GOBI** | 法国 | 350 km/h | 5 km | 2.2 kg | 纯动能 | €5,000-7,000 | 中东部署 |
-| **BLAZE** | 拉脱维亚 | — | 10-20 km | <6 kg | 800g 高爆破片 | — | 多国交付 |
-| **DroneHunter F700** | 美国 | — | ~4 km | 18 kg | 网枪捕获 | — | 4,500+ 次捕获 |
-| **Anvil** | 美国 | 高速 | 短程 | 5.3 kg | 动能/高爆(M型) | — | 军事评估 |
-| **X-Wing** | 法国/乌克兰 | 300 km/h | 15 km | 3.5 kg | AI 制导 | — | 乌克兰实战 |
-| **Black Bird** | 法国/乌克兰 | 670 km/h | 30 km | 6 kg | 涡喷+AI | — | 原型测试 |
-| **Hornet Block 2** | 瑞士 | — | >70 km | — | 高爆战斗部 | — | 展会展示 |
+### 9.1 基本信息
+
+| 项目 | 数据 |
+|------|------|
+| 研发方 | Cambridge Aerospace，英国（2024 年底成立） |
+| 类型 | 管式发射涡喷拦截弹 |
+| 首次飞行 | 2025 年 1 月开发，6 周内完成首飞 |
+| 合同 | 2026 年 4 月英国国防部签署数百万英镑合同 |
+| 首批交付 | 2026 年 5 月 |
+
+### 9.2 技术参数
+
+| 参数 | 数值 |
+|------|------|
+| 最大速度 | 700 km/h（Mach 0.7） |
+| 射程 | >30 km |
+| 重量 | ~18 kg（40 lbs） |
+| 长度 | <1 m |
+| 翼展 | 1.3 m |
+| 动力 | 涡喷发动机 |
+| 导引头 | X 波段雷达导引头（全天候） |
+| 战斗部 | 爆破破片战斗部 |
+| 可拦截目标 | Shahed 级自杀无人机、亚音速巡航导弹 |
+| 构型 | 折叠半翼 + 倒 V 尾翼，管式储存/发射 |
+
+### 9.3 技术亮点
+
+**从零到交付仅 16 个月**：Cambridge Aerospace 2024 年底成立，2025 年 1 月开始研发 Skyhammer，6 周内完成首飞，2026 年 4 月获得英国国防部合同，5 月即开始交付。这是英国近代国防采购中最快的时间线之一。
+
+**真正的"拦截弹"**：与大多数多旋翼截击无人机不同，Skyhammer 更接近微型导弹——涡喷推进、雷达制导、爆破破片战斗部。700 km/h 的速度让它可以拦截不仅是慢速 Shahed，还包括亚音速巡航导弹。
+
+**X 波段雷达全天候能力**：X 波段主动雷达导引头使 Skyhammer 不依赖光电/红外传感器，可在雨、雾、沙尘暴等恶劣天气中工作。
+
+**英国-海湾双向部署**：该合同不仅面向英军，还包括向海湾合作伙伴供货，附带集成支持、技术援助和操作员培训。
 
 ---
 
-## 十、技术趋势与未来展望
+## 十、美国 RTX/Raytheon Coyote 系列——美军 C-UAS 主力
 
-### 10.1 五大发展趋势
+### 10.1 型号谱系
+
+Coyote 是美军 LIDS（低慢小无人机综合防御系统）的核心拦截弹，已发展出多个变体：
+
+| 变体 | 毁伤方式 | 动力 | 速度 | 可回收 | 采购量 |
+|------|---------|------|------|--------|-------|
+| Block 2+ | 动能/破片战斗部 | 涡轮发动机 + 火箭助推 | 555–595 km/h | 否（消耗型） | ~6,700 枚 |
+| Block 3NK | 非动能（电子战载荷） | 电动后推桨 | 较低（巡飞优化） | 是（可回收重用） | ~700 枚 |
+| LE SR | 多用途发射效应 | 电动 | — | 否 | 原型阶段 |
+
+### 10.2 技术参数（Block 2+）
+
+| 参数 | 数值 |
+|------|------|
+| 重量 | 比 Block 1 的 5.9 kg 更重（具体保密） |
+| 速度 | 555–595 km/h（345–370 mph） |
+| 射程 | 10–15 km |
+| 战斗部 | 破片战斗部（针对小型无人机优化） |
+| 配套雷达 | KuRFS Ku 波段 AESA 雷达（可探测 9 mm 弹头大小目标） |
+| 单价 | ~$100,000/枚 |
+
+### 10.3 技术亮点
+
+**美军唯一成建制装备的 C-UAS 拦截弹**：Coyote 是美国陆军 M-LIDS 和 FS-LIDS 系统的标准配置拦截弹，已实战部署。2023-2029 年间计划采购约 6,700 枚。
+
+**KuRFS 雷达配合**：Ku 波段射频传感器可探测 16 km 外的小型无人机，最小可探测 9 mm 弹头大小的目标，为 Coyote 提供精确引导。
+
+**Block 3NK 非动能反蜂群**：2026 年 2 月美军演示中，Block 3NK 成功击败无人机蜂群。它使用电子战载荷而非物理碰撞来瘫痪目标，一架 Block 3NK 可对抗多架无人机，且可回收重装后再次使用，从根本上改变了反蜂群的经济学。
+
+**多平台发射**：Coyote LE SR 变体已成功从 M2 Bradley 战车的 TOW 发射器和 Bell 407 直升机上发射，展示了跨平台适配能力。
+
+---
+
+## 十一、以色列 Iron Drone Raider——加沙战场验证的自主拦截器
+
+### 11.1 基本信息
+
+| 项目 | 数据 |
+|------|------|
+| 研发方 | Airobotics（Ondas Autonomous Systems 子公司），以色列 |
+| 类型 | 八旋翼自主截击/捕获无人机 |
+| 实战 | 加沙冲突中实战验证 |
+| 状态 | 2025 年起进入美国国防市场 |
+
+### 11.2 技术参数
+
+| 参数 | 数值 |
+|------|------|
+| 构型 | 八旋翼（竞速无人机衍生） |
+| 重量 | ~4 kg（8 lbs） |
+| 速度 | 竞速无人机级别（极高机动性） |
+| 载荷 | 1 kg 弹道网（含可选降落伞） |
+| 可拦截目标 | Class-1 旋翼/固定翼无人机 |
+| 拦截距离 | 数英里（~3-5 km） |
+| 发射箱容量 | 3 架 Raider |
+| 传感器 | 地面雷达 + 机载微型雷达 + 热成像/光学 + AI 视觉 |
+| 操作 | 全自主（检测→发射→跟踪→捕获→返航全流程无人值守） |
+
+### 11.3 技术亮点
+
+**竞速无人机基因**：Iron Drone Raider 源自高速竞速无人机平台，具备极高的加速度和机动性，可追上大多数消费级和军用小型无人机。
+
+**全自主闭环**：从目标检测、Raider 发射、飞向目标区域、机载传感器接管、AI 视觉锁定、发射捕获网、目标降落、Raider 返航、装填新网、重新待命——整个流程**全自主完成**，无需人工飞手。
+
+**网+降落伞安全捕获**：捕获网将目标无人机缠绕后，可选降落伞减缓坠落速度，减少地面冲击。这使其特别适合城市上空、机场、监狱等敏感区域。
+
+**加沙实战验证**：在哈马斯-以色列冲突中加速升级并实战部署，积累了宝贵的实战经验，是少数真正经历过热战考验的截击系统。
+
+---
+
+## 十二、以色列 Rafael Hunter Eagle & Ghost Hunter——从 Iron Dome 到无人机对无人机
+
+### 12.1 Hunter Eagle（VTOL 动能截击型）
+
+| 参数 | 数值 |
+|------|------|
+| 研发方 | Rafael（以色列） |
+| 构型 | VTOL，十字形翼 + 翼尖电动机 |
+| 高度 | 0.4–0.5 m |
+| 重量 | 5–10 kg |
+| 速度 | 估计 150–200 km/h |
+| 射程 | 估计 10–15 km |
+| 战斗部 | 无爆炸物（纯动能） |
+| 制导 | 机鼻光电导引头 + AI 自主 |
+| 蜂群能力 | 支持多机协同 |
+| 状态 | 2025 年底演示，2026 年交付 |
+
+### 12.2 Ghost Hunter（涡喷远程截击型）
+
+| 参数 | 数值 |
+|------|------|
+| 构型 | 十字形三角翼 + 双涡喷发动机 |
+| 高度 | 1.4–1.6 m |
+| 重量 | 50–60 kg |
+| 速度 | Hunter Eagle 的约 2 倍（估计 300-400 km/h） |
+| 制导 | 机鼻 RF 雷达 + AI |
+| 载荷 | 数公斤级战斗部 |
+| 状态 | 2026 年底演示，2027 年量产交付 |
+
+### 12.3 技术亮点
+
+**Rafael 防空体系的延伸**：Rafael 是 Iron Dome（铁穹）的研发商。Hunter Eagle 和 Ghost Hunter 是 Rafael 将其防空能力向"反无人机"领域延伸的产物，与 Drone Dome（检测分类）、Lite Beam（10 kW 激光）共同构成分层 C-UAS 体系。
+
+**无爆炸物的城市安全设计**：Hunter Eagle 不携带任何爆炸物，完全依靠动能撞击。如果拦截失败或任务取消，可自主返航垂直降落，避免"副作用"。这使它成为城市和人口密集区最安全的截击方案之一。
+
+**Ghost Hunter 的涡喷双发设计**：50-60 kg 的起飞重量、双涡喷发动机、RF 雷达制导，Ghost Hunter 实质上是一枚微型空对空导弹，专门对付高速高价值无人机目标。
+
+---
+
+## 十三、德国 Diehl Cicada——IRIS-T 家族的反无人机延伸
+
+### 13.1 基本信息
+
+| 项目 | 数据 |
+|------|------|
+| 研发方 | Diehl Defence，德国（IRIS-T 防空导弹制造商） |
+| 类型 | 垂直起飞螺旋桨截击无人机 |
+| 首次展示 | EnforceTac 2025（纽伦堡） |
+| 计划上市 | 2026 年 |
+| 集成系统 | Guardion / Sky Sphere / Garmr C-UAS |
+
+### 13.2 技术参数
+
+| 参数 | 数值 |
+|------|------|
+| 长度 | 700 mm |
+| 直径 | 300 mm |
+| 构型 | 圆柱机身 + X 形四三角翼（可折叠） |
+| 动力 | 机鼻五叶电动螺旋桨 |
+| 最大速度 | 200 km/h |
+| 拦截距离 | 4–5 km |
+| 飞行时间 | ~5 分钟 |
+| 中段制导 | 无线电数据链 + 地面引导 |
+| 末段制导 | 机载万向节主动雷达 |
+| 战斗部 | 高爆破片（军用版）/ 捕获网（非致命版） |
+| 可拦截目标 | Class 1-2 无人机（含 ~200 kg 级 Shahed-131） |
+
+### 13.3 技术亮点
+
+**IRIS-T 厂商背书**：Diehl Defence 是德国 IRIS-T SLM 防空导弹系统的制造商，该系统在乌克兰战场已大量拦截俄方导弹和无人机。Cicada 是 Diehl 将其防空经验向低成本反无人机领域的延伸。
+
+**Garmr 系统集成**：Cicada 不是独立产品，而是 Diehl Garmr 移动 C-UAS 系统的一部分。Garmr SRS（短程）版本搭载 15 枚 Cicada，Garmr MRS（中程）版本则换装 4 枚 Destinus Hornet Block 2，形成短程+中远程分层。
+
+**双模战斗部**：军用高爆破片版本用于硬杀伤，民用捕获网版本用于机场、核电站等需要"零碎片"的场景。网版可回收重装。
+
+**主动雷达末制导**：机鼻的万向节主动雷达可以在末段自主锁定目标，不依赖光电传感器，在夜间和恶劣天气中仍然有效。
+
+---
+
+## 十四、以色列 SpearUAV Viper I——装甲车辆的"随身防空盾"
+
+### 14.1 基本信息
+
+| 项目 | 数据 |
+|------|------|
+| 研发方 | SpearUAV，以色列 |
+| 类型 | 罐装发射拦截巡飞弹 |
+| 定位 | 装甲车辆/固定阵地上层攻击防御 |
+| 状态 | 系统集成阶段，即将交付 |
+
+### 14.2 技术参数
+
+| 参数 | 数值 |
+|------|------|
+| 发射重量 | 3.5 kg |
+| 载荷 | 最大 1.3 kg（第三方战斗部） |
+| 拦截距离 | 2 km |
+| 构型 | 圆柱体机身，折叠旋翼臂，罐装发射 |
+| 制导 | AI 高速目标跟踪 |
+| 发射器 | Multi Canister Launcher（MCL），可载多枚 |
+| 平台兼容 | IFV、MBT、UGV、4×4 车辆、舰船 |
+| 开放架构 | 兼容第三方传感器、通信设备、战斗部 |
+
+### 14.3 技术亮点
+
+**车载一体化防空**：Viper I 的核心理念是让每辆装甲车都拥有自己的反无人机能力。MCL 发射器可以直接安装在步战车、主战坦克、无人地面车辆上，车辆行进中即可发射。
+
+**与 Rafael Trophy 主动防护集成**：Viper I 可以与 Rafael Trophy APS（主动防护系统）集成，为装甲车辆提供从反坦克导弹到无人机的全方位防护。
+
+**Viper 家族通用发射器**：同一个 MCL 发射器可以混装 Viper 300（侦察巡飞弹）和 Viper I（截击型），使一辆车同时拥有侦察和防空能力。
+
+---
+
+## 十五、综合对比：全球十四款截击无人机参数一览
+
+| 型号 | 国家 | 速度 | 射程 | 重量 | 毁伤方式 | 单价 | 实战验证 |
+|------|------|------|------|------|---------|------|---------|
+| **STING** | 🇺🇦 乌克兰 | 343 km/h | 25 km | — | 动能+爆炸 | ~$2,100 | 击落 3,900+ |
+| **GOBI** | 🇫🇷 法国 | 350 km/h | 5 km | 2.2 kg | 纯动能 | €5,000-7,000 | 中东部署 |
+| **BLAZE** | 🇱🇻 拉脱维亚 | — | 10-20 km | <6 kg | 800g 高爆破片 | — | 多国交付 |
+| **DroneHunter F700** | 🇺🇸 美国 | — | ~4 km | 18 kg | 网枪捕获 | — | 4,500+ 次捕获 |
+| **Anvil / Anvil-M** | 🇺🇸 美国 | 高速 | 短程 | 5.3 kg | 动能/高爆 | — | 军事评估 |
+| **X-Wing** | 🇫🇷/🇺🇦 法乌联合 | 300 km/h | 15 km | 3.5 kg | AI 动能 | — | 乌克兰实战 |
+| **Black Bird** | 🇫🇷/🇺🇦 法乌联合 | 670 km/h | 30 km | 6 kg | 涡喷+AI | — | 原型测试 |
+| **Hornet Block 2** | 🇨🇭 瑞士 | 高亚音速 | >70 km | — | 高爆战斗部 | — | 展会展示 |
+| **Skyhammer** | 🇬🇧 英国 | 700 km/h | >30 km | 18 kg | 雷达+破片 | 数百万£合同 | 2026.5 交付 |
+| **Coyote Block 2+** | 🇺🇸 美国 | 555-595 km/h | 10-15 km | — | 破片战斗部 | ~$100,000 | 实战部署 |
+| **Coyote Block 3NK** | 🇺🇸 美国 | 巡飞优化 | 10-15 km | ~6 kg | 电子战（非动能） | — | 2026 演示 |
+| **Iron Drone Raider** | 🇮🇱 以色列 | 竞速级 | 3-5 km | 4 kg | 网捕获 | — | 加沙实战 |
+| **Hunter Eagle** | 🇮🇱 以色列 | 150-200 km/h | 10-15 km | 5-10 kg | 纯动能（无爆炸物） | — | 2026 交付 |
+| **Ghost Hunter** | 🇮🇱 以色列 | ~300-400 km/h | — | 50-60 kg | RF 雷达+战斗部 | — | 2027 量产 |
+| **Cicada** | 🇩🇪 德国 | 200 km/h | 4-5 km | — | 破片/捕获网 | — | 2026 上市 |
+| **Viper I** | 🇮🇱 以色列 | 高速 | 2 km | 3.5 kg | 第三方战斗部 | — | 集成阶段 |
+
+---
+
+## 十六、技术趋势与未来展望
+
+### 16.1 六大发展趋势
 
 **1. AI 自主化程度持续提升**
 
@@ -356,7 +593,7 @@ Destinus Hornet 采用渐进式发展路线，目前有三个主要变体：
 
 **2. 速度竞赛**
 
-目标无人机在变快——俄罗斯 Geran-3 采用涡喷发动机，速度远超传统的活塞式 Shahed。截击机必须更快：Alta Ares Black Bird 达到 670 km/h，Destinus Hornet 3 采用涡喷达到高亚音速。
+目标无人机在变快——俄罗斯 Geran-3 采用涡喷发动机，速度远超传统的活塞式 Shahed。截击机必须更快：Alta Ares Black Bird 达到 670 km/h，Skyhammer 达到 700 km/h（Mach 0.7），Destinus Hornet 3 采用涡喷达到高亚音速。速度已经从 200 km/h 级别跃升到 700 km/h 级别。
 
 **3. 成本竞赛**
 
@@ -371,9 +608,13 @@ STING 的 $2,100 设定了价格标杆。未来的截击机必须维持在目标
 
 **5. 从专用走向通用平台**
 
-Destinus Hornet Block 2 已将反直升机纳入目标清单（70 km 射程、3 kg 载荷）。未来截击无人机可能演变为通用化的低成本制导弹药平台。
+Destinus Hornet Block 2 已将反直升机纳入目标清单（70 km 射程、3 kg 载荷）。Coyote LE SR 从 Bradley 战车和直升机上发射。未来截击无人机可能演变为通用化的低成本制导弹药平台。
 
-### 10.2 乌克兰战场的启示
+**6. 非动能反蜂群成为新方向**
+
+Coyote Block 3NK 的非动能电子战载荷开创了新范式——一架可回收的截击机通过电子战手段同时瘫痪多架敌方无人机。这从根本上改变了"一对一"消耗战的经济模型，使防御方在面对蜂群攻击时不再需要数量对等的拦截弹。
+
+### 16.2 乌克兰战场的启示
 
 乌克兰战争作为人类历史上首次大规模无人机战争，为截击无人机的发展提供了无可替代的实战数据：
 
@@ -383,11 +624,21 @@ Destinus Hornet Block 2 已将反直升机纳入目标清单（70 km 射程、3 
 
 ---
 
-## 十一、总结
+## 十七、总结
 
-截击无人机正在从一个新兴概念快速成长为现代防空体系的**核心组成部分**。乌克兰 STING 以 $2,100 的单价和 3,900+ 的战绩证明了这一概念的可行性；法国 GOBI 以 2.2 kg 的极致轻量化展示了步兵班组级反无人机的可能；拉脱维亚 BLAZE 率先获得 NATO 编码，推动了标准化进程；Fortem DroneHunter F700 的网枪捕获方案为敏感区域防御提供了独特选择；而 Destinus Hornet 的 70 km 射程则将截击无人机的概念推向了传统防空导弹的领域。
+截击无人机正在从一个新兴概念快速成长为现代防空体系的**核心组成部分**。本文梳理的十四款系统（涉及八个国家）展现了这一领域的多元化发展路径：
 
-这场博弈的本质是**成本不对称之战**——谁能以更低的成本实现更高的拦截概率，谁就赢得了现代防空的主动权。
+- **乌克兰 STING** 以 $2,100 的单价和 3,900+ 的战绩证明了低成本大规模截击的可行性
+- **法国 GOBI** 以 2.2 kg 的极致轻量化展示了步兵班组级反无人机的可能
+- **拉脱维亚 BLAZE** 率先获得 NATO 编码，推动了标准化进程
+- **美国 DroneHunter F700** 的网枪捕获方案为敏感区域防御提供了独特选择
+- **英国 Skyhammer** 以 700 km/h 和 30 km 射程逼近了传统导弹的性能
+- **美国 Coyote Block 3NK** 的非动能反蜂群方案打开了"一对多"的新范式
+- **以色列 Rafael Hunter Eagle/Ghost Hunter** 将 Iron Dome 级别的防空思维带入了无人机对无人机领域
+- **德国 Diehl Cicada** 与 Destinus Hornet 的组合展示了短程+中远程分层集成的方向
+- **以色列 SpearUAV Viper I** 让每辆装甲车都拥有了自己的防空能力
+
+这场博弈的本质是**成本不对称之战**——谁能以更低的成本实现更高的拦截概率，谁就赢得了现代防空的主动权。而 2026 年的趋势表明，截击无人机已不仅仅是乌克兰战场的特殊产物，它正在成为从波罗的海到波斯湾、从北极到中东的**全球性标准防御手段**。
 
 ---
 
@@ -396,21 +647,32 @@ Destinus Hornet Block 2 已将反直升机纳入目标清单（70 km 射程、3 
 1. Wild Hornets 官网. *STING – Shahed Interceptor*. [https://wildhornets.com/en/sting-interceptor](https://wildhornets.com/en/sting-interceptor)
 2. Wikipedia. *Sting (drone)*. [https://en.wikipedia.org/wiki/Sting_(drone)](https://en.wikipedia.org/wiki/Sting_(drone))
 3. Harmattan AI 官网. *GOBI High-Speed Drone Interceptor*. [https://www.harmattan.ai/systems/gobi/](https://www.harmattan.ai/systems/gobi/)
-4. Army Recognition. *France's Harmattan AI Launches GOBI Drone*. 2025-07-18. [https://armyrecognition.com/news/aerospace-news/2025/frances-harmattan-ai-launches-gobi-drone-to-revolutionize-counter-drone-warfare-with-ultra-fast-interception](https://armyrecognition.com/news/aerospace-news/2025/frances-harmattan-ai-launches-gobi-drone-to-revolutionize-counter-drone-warfare-with-ultra-fast-interception)
+4. Army Recognition. *France's Harmattan AI Launches GOBI Drone*. 2025-07-18. [链接](https://armyrecognition.com/news/aerospace-news/2025/frances-harmattan-ai-launches-gobi-drone-to-revolutionize-counter-drone-warfare-with-ultra-fast-interception)
 5. Origin Robotics 官网. *BLAZE*. [https://origin-robotics.com/blaze](https://origin-robotics.com/blaze)
-6. Soldier Systems Daily. *Origin Robotics Unveils BLAZE*. 2025-09-10. [https://soldiersystems.net/2025/09/10/origin-robotics-unveils-blaze-a-cost-effective-drone-interceptor-with-ai-powered-computer-vision/](https://soldiersystems.net/2025/09/10/origin-robotics-unveils-blaze-a-cost-effective-drone-interceptor-with-ai-powered-computer-vision/)
-7. EDR Magazine. *DSEI 2025 - Origin Robotics counter-UAS interceptor Blaze*. [https://www.edrmagazine.eu/dsei-2025-origin-robotics-counter-uas-interceptor-blaze](https://www.edrmagazine.eu/dsei-2025-origin-robotics-counter-uas-interceptor-blaze)
+6. Soldier Systems Daily. *Origin Robotics Unveils BLAZE*. 2025-09-10. [链接](https://soldiersystems.net/2025/09/10/origin-robotics-unveils-blaze-a-cost-effective-drone-interceptor-with-ai-powered-computer-vision/)
+7. EDR Magazine. *DSEI 2025 - Origin Robotics counter-UAS interceptor Blaze*. [链接](https://www.edrmagazine.eu/dsei-2025-origin-robotics-counter-uas-interceptor-blaze)
 8. Fortem Technologies 官网. *DroneHunter F700*. [https://www.fortemtech.com/products/dronehunter-f700/](https://www.fortemtech.com/products/dronehunter-f700/)
-9. Fortem Technologies Blog. *The technology to safely stop drones already exists*. 2026-02-14. [https://www.fortemtech.com/blog/discussions/2026-02-14-the-technology-to-safely-stop-drones-already-exists-the-u-s-government-is-buying-it-from-us/](https://www.fortemtech.com/blog/discussions/2026-02-14-the-technology-to-safely-stop-drones-already-exists-the-u-s-government-is-buying-it-from-us/)
+9. Fortem Technologies Blog. *The technology to safely stop drones already exists*. 2026-02-14. [链接](https://www.fortemtech.com/blog/discussions/2026-02-14-the-technology-to-safely-stop-drones-already-exists-the-u-s-government-is-buying-it-from-us/)
 10. Anduril 官网. *Counter UAS / Anvil*. [https://www.anduril.com/counter-uas](https://www.anduril.com/counter-uas)
-11. Defence Blog. *U.S. steps closer to fielding autonomous drone interceptor*. 2025-11-07. [https://defence-blog.com/u-s-steps-closer-to-fielding-autonomous-drone-interceptor/](https://defence-blog.com/u-s-steps-closer-to-fielding-autonomous-drone-interceptor/)
+11. Defence Blog. *U.S. steps closer to fielding autonomous drone interceptor*. 2025-11-07. [链接](https://defence-blog.com/u-s-steps-closer-to-fielding-autonomous-drone-interceptor/)
 12. Alta Ares 官网. [https://www.altaares.com/](https://www.altaares.com/)
-13. UNITED24 Media. *Shahed Killers: Ukraine and France Launch Next-Gen Jet-Powered Interceptor Drones*. 2025-11-17. [https://united24media.com/latest-news/shahed-killers-ukraine-and-france-launch-next-gen-jet-powered-interceptor-drones-13528](https://united24media.com/latest-news/shahed-killers-ukraine-and-france-launch-next-gen-jet-powered-interceptor-drones-13528)
-14. Militarnyi. *France to Counter Iranian Shaheds With Three Types of Interceptor Drones*. [https://militarnyi.com/en/news/france-counter-shaheds-interceptor-drones/](https://militarnyi.com/en/news/france-counter-shaheds-interceptor-drones/)
-15. Army Recognition. *Destinus Unveils Hornet Block2 Interceptor*. BEDEX 2026. [https://www.armyrecognition.com/archives/archives-defense-exhibitions/2026-archives-news-defense-exhibitions/bedex-2026/destinus-unveils-hornet-block2-interceptor-as-a-european-quick-response-counter-drone-system](https://www.armyrecognition.com/archives/archives-defense-exhibitions/2026-archives-news-defense-exhibitions/bedex-2026/destinus-unveils-hornet-block2-interceptor-as-a-european-quick-response-counter-drone-system)
+13. UNITED24 Media. *Shahed Killers: Ukraine and France Launch Next-Gen Jet-Powered Interceptor Drones*. 2025-11-17. [链接](https://united24media.com/latest-news/shahed-killers-ukraine-and-france-launch-next-gen-jet-powered-interceptor-drones-13528)
+14. Militarnyi. *France to Counter Iranian Shaheds With Three Types of Interceptor Drones*. [链接](https://militarnyi.com/en/news/france-counter-shaheds-interceptor-drones/)
+15. Army Recognition. *Destinus Unveils Hornet Block2 Interceptor*. BEDEX 2026. [链接](https://www.armyrecognition.com/archives/archives-defense-exhibitions/2026-archives-news-defense-exhibitions/bedex-2026/destinus-unveils-hornet-block2-interceptor-as-a-european-quick-response-counter-drone-system)
 16. Destinus 官网. *Hornet*. [https://www.destinus.com/page/hornet](https://www.destinus.com/page/hornet)
-17. Unmanned Airspace. *Faster, further, more lethal: comparing worldwide kinetic intercept drone capabilities*. 2026. [https://www.unmannedairspace.info/counter-uas-systems-and-policies/faster-further-more-lethal-comparing-kinetic-intercept-drone-capabilities-from-around-the-world/](https://www.unmannedairspace.info/counter-uas-systems-and-policies/faster-further-more-lethal-comparing-kinetic-intercept-drone-capabilities-from-around-the-world/)
-18. H I Sutton / Covert Shores. *Guide To Ukrainian Interceptor Drones*. [https://www.hisutton.com/Ukrainian-Interceptor-Drones.html](https://www.hisutton.com/Ukrainian-Interceptor-Drones.html)
+17. UK GOV. *UK start-up to supply interceptor missiles to UK military and Gulf partners*. 2026-04-10. [链接](https://www.gov.uk/government/news/uk-start-up-to-supply-interceptor-missiles-to-uk-military-and-gulf-partners)
+18. Defence Blog. *UK orders Skyhammer drone interceptors from Cambridge Aerospace*. 2026-04-10. [链接](https://defence-blog.com/uk-orders-skyhammer-drone-interceptors-from-cambridge-aerospace/)
+19. RTX/Raytheon 官网. *Coyote C-UAS*. [https://www.rtx.com/raytheon/what-we-do/integrated-air-and-missile-defense/coyote](https://www.rtx.com/raytheon/what-we-do/integrated-air-and-missile-defense/coyote)
+20. Raytheon MediaRoom. *RTX's Raytheon's non-kinetic Coyote variant defeats multiple drone swarms*. 2026-02-11. [链接](https://raytheon.mediaroom.com/2026-02-11-RTXs-Raytheons-non-kinetic-Coyote-variant-defeats-multiple-drone-swarms)
+21. Breaking Defense. *Iron Drone Raider is at the cutting edge of autonomous drone defense*. 2025-03. [链接](https://breakingdefense.com/2025/03/iron-drone-raider-is-at-the-cutting-edge-of-autonomous-drone-defense/)
+22. Autonomy Global. *RAFAEL's New Counter-UAS Systems: The Hunter Eagle and Ghost Hunter*. [链接](https://www.autonomyglobal.co/rafaels-new-counter-uas-systems-the-hunter-eagle-and-ghost-hunter-interceptor-drones/)
+23. Janes. *EnforceTac 2025: Diehl Defence presents Cicada UAV interceptor*. 2025-03-03. [链接](https://www.janes.com/osint-insights/defence-news/air/enforcetac-2025-diehl-defence-presents-cicada-uav-interceptor)
+24. EDR Magazine. *Enforce Tac 2026 – Diehl Defence relaunches its Garmr counter-drone system*. [链接](https://www.edrmagazine.eu/enforce-tac-2026-diehl-defence-relaunches-its-garmr-counter-drone-system)
+25. SpearUAV 官网. *VIPER I*. [https://spearuav.com/viper-family/viper-I/](https://spearuav.com/viper-family/viper-I/)
+26. Next Gen Defense. *SpearUAV Launches Viper Top-Attack Drone Interceptor*. 2024-10-21. [链接](https://nextgendefense.com/spearuav-top-attack-drone-interceptor/)
+27. Wikipedia. *Raytheon Coyote*. [https://en.wikipedia.org/wiki/Raytheon_Coyote](https://en.wikipedia.org/wiki/Raytheon_Coyote)
+28. Unmanned Airspace. *Faster, further, more lethal: comparing worldwide kinetic intercept drone capabilities*. 2026. [链接](https://www.unmannedairspace.info/counter-uas-systems-and-policies/faster-further-more-lethal-comparing-kinetic-intercept-drone-capabilities-from-around-the-world/)
+29. H I Sutton / Covert Shores. *Guide To Ukrainian Interceptor Drones*. [https://www.hisutton.com/Ukrainian-Interceptor-Drones.html](https://www.hisutton.com/Ukrainian-Interceptor-Drones.html)
 
 ---
 
