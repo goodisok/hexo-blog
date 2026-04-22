@@ -1261,7 +1261,439 @@ ffmpeg -f v4l2 -i /dev/video0 \
 
 ---
 
-## 十三、参考资源
+## 十三、NAT 穿越与 WebRTC 网络部署
+
+### 13.1 问题：为什么 WebRTC 在公网连不通
+
+WebRTC 使用 UDP 传输媒体数据，但大多数设备都在 NAT（网络地址转换）后面。NAT 会修改出站数据包的源端口和 IP，导致外部设备无法直接向内部设备发送数据。
+
+```
+设备 A（192.168.1.100:5000）                设备 B（10.0.0.50:6000）
+       │                                           │
+   NAT 路由器 A                                NAT 路由器 B
+  （公网 1.2.3.4:xxxxx）                    （公网 5.6.7.8:yyyyy）
+       │                                           │
+       └──────────── 互联网 ────────────────────────┘
+                  A 不知道 B 的公网地址
+                  B 不知道 A 的公网地址
+                  双方都无法直接发 UDP 包给对方
+```
+
+### 13.2 ICE 框架：STUN + TURN
+
+WebRTC 使用 **ICE**（Interactive Connectivity Establishment）框架解决 NAT 穿越：
+
+```
+ICE 候选地址收集流程：
+
+1. Host Candidate     — 本机直接 IP（192.168.1.100:5000）
+                        仅局域网内有效
+
+2. Server Reflexive   — 通过 STUN 服务器获取公网 IP + 端口
+   Candidate            STUN 服务器告诉你："外面看到你是 1.2.3.4:12345"
+                        大约 80% 的 NAT 场景可以直连
+
+3. Relay Candidate    — 通过 TURN 服务器中转所有数据
+                        当 STUN 打洞失败时使用（对称 NAT）
+                        100% 可通，但增加延迟和服务器成本
+```
+
+**STUN** (Session Traversal Utilities for NAT)：
+
+```
+设备 ──UDP──► STUN 服务器（公网）
+      ◄──── "你的公网地址是 1.2.3.4:12345"
+
+设备收集到的 Server Reflexive 候选地址 = 1.2.3.4:12345
+对端可以向这个地址发 UDP 包实现直连
+```
+
+STUN 请求很轻量（几十字节），公共 STUN 服务器免费可用：
+
+```
+stun:stun.l.google.com:19302
+stun:stun1.l.google.com:19302
+stun:stun.cloudflare.com:3478
+```
+
+**TURN** (Traversal Using Relays around NAT)：
+
+```
+设备 A ──UDP──► TURN 服务器 ──UDP──► 设备 B
+           所有媒体数据经过 TURN 中转
+           增加延迟 10-50ms，消耗服务器带宽
+```
+
+TURN 是最后的保底方案，需要自己部署服务器。推荐开源方案：**coturn**。
+
+### 13.3 部署 coturn（TURN 服务器）
+
+```bash
+# 安装
+sudo apt install coturn
+
+# 配置 /etc/turnserver.conf
+listening-port=3478
+tls-listening-port=5349
+external-ip=YOUR_PUBLIC_IP
+realm=your-domain.com
+server-name=your-domain.com
+lt-cred-mech
+user=webrtc:password123
+total-quota=100
+stale-nonce=600
+no-multicast-peers
+
+# 启动
+sudo systemctl enable coturn
+sudo systemctl start coturn
+```
+
+### 13.4 MediaMTX 配置 ICE 服务器
+
+```yaml
+# mediamtx.yml
+webrtcAddress: :8889
+webrtcAdditionalHosts:
+  - YOUR_PUBLIC_IP
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+  - url: turn:your-domain.com:3478
+    username: webrtc
+    password: password123
+```
+
+### 13.5 NAT 类型与穿越成功率
+
+| NAT 类型 | 穿越难度 | STUN 直连 | TURN 中转 |
+|---------|---------|----------|----------|
+| Full Cone（完全锥形） | 低 | ✅ | 不需要 |
+| Restricted Cone（限制锥形） | 低 | ✅ | 不需要 |
+| Port Restricted Cone（端口限制锥形） | 中 | ✅ | 不需要 |
+| Symmetric（对称型） | 高 | ❌ | ✅ 必须 |
+
+家用路由器多数是 Port Restricted Cone，STUN 即可。企业防火墙和 4G/5G 运营商 NAT 多数是 Symmetric，必须依赖 TURN。
+
+---
+
+## 十四、PTS/DTS 时间戳与音视频同步
+
+### 14.1 两种时间戳
+
+每一帧编码后都携带两个时间戳：
+
+| 时间戳 | 全称 | 含义 | 单位 |
+|--------|------|------|------|
+| **PTS** | Presentation Time Stamp | 这一帧应该在什么时刻**显示** | 通常 1/90000 秒 |
+| **DTS** | Decoding Time Stamp | 这一帧应该在什么时刻**解码** | 同上 |
+
+**无 B 帧时**（低延迟模式），解码顺序 = 显示顺序，DTS = PTS：
+
+```
+编码/传输顺序:  I₀  P₁  P₂  P₃  P₄  P₅
+显示顺序:       I₀  P₁  P₂  P₃  P₄  P₅
+DTS:            0   1   2   3   4   5
+PTS:            0   1   2   3   4   5
+```
+
+**有 B 帧时**，解码顺序 ≠ 显示顺序，DTS ≠ PTS：
+
+```
+显示顺序:       I₀  B₁  B₂  P₃  B₄  B₅  P₆
+编码/传输顺序:  I₀  P₃  B₁  B₂  P₆  B₄  B₅
+                     ↑ P₃ 必须先解码，B₁/B₂ 才能参考它
+
+DTS:            0   1   2   3   4   5   6
+PTS:            0   3   1   2   6   4   5
+```
+
+B 帧是"先解码后面的 P 帧，再解码 B 帧"——这就是为什么 B 帧增加编码延迟。
+
+### 14.2 音视频同步
+
+音频和视频是独立编码的两条流，靠 PTS 对齐实现同步播放：
+
+```
+视频: I(PTS=0)  P(PTS=33ms)  P(PTS=66ms)  P(PTS=100ms) ...
+音频: A(PTS=0)  A(PTS=21ms)  A(PTS=42ms)  A(PTS=64ms)  ...
+                              ↑
+                    播放器在 66ms 时刻同时呈现：
+                    视频帧 PTS≤66ms 的最新帧 + 音频帧 PTS≤66ms 的最新样本
+```
+
+**常见音画不同步原因**：
+
+| 原因 | 表现 | 解决方法 |
+|------|------|---------|
+| 推流端时钟不一致 | 音频逐渐领先/落后 | 使用同一时钟源采集音视频 |
+| 编码延迟不对称 | 视频延迟大于音频 | 减少 B 帧或用硬编码 |
+| 网络抖动 | 间歇性不同步 | 增加 jitter buffer |
+| 播放器缓冲策略 | 启动时不同步 | 配置缓冲大小和同步模式 |
+
+```bash
+# FFmpeg 查看 PTS/DTS
+ffprobe -show_frames -select_streams v:0 \
+    -print_format csv input.mp4 | head -20
+
+# FFmpeg 修复时间戳问题
+ffmpeg -fflags +genpts -i broken.mp4 -c copy fixed.mp4
+
+# FFmpeg 强制音视频同步
+ffmpeg -i input -af aresample=async=1 -c:v copy output.mp4
+```
+
+---
+
+## 十五、自适应码率（ABR）与多码率分发
+
+### 15.1 ABR 工作原理
+
+自适应码率的核心思想：服务端准备多个分辨率/码率版本，播放器根据当前网络状况自动切换。
+
+```
+编码器输出:
+├── 1080p @ 4500 kbps ─┐
+├── 720p  @ 2500 kbps ─┼── 切片器 → CDN → 播放器
+├── 480p  @ 1200 kbps ─┤                   │
+└── 360p  @  600 kbps ─┘                   ↓
+                                    带宽估计算法
+                                    (BOLA / ABR-Rule)
+                                           │
+                                    自动选择最佳档位
+```
+
+### 15.2 HLS 多码率梯度配置
+
+```bash
+# FFmpeg 一次编码输出 4 个码率档位的 HLS
+ffmpeg -i input.mp4 \
+    -filter_complex \
+    "[0:v]split=4[v1][v2][v3][v4]; \
+     [v1]scale=1920:1080[v1out]; \
+     [v2]scale=1280:720[v2out]; \
+     [v3]scale=854:480[v3out]; \
+     [v4]scale=640:360[v4out]" \
+    \
+    -map "[v1out]" -c:v:0 libx264 -b:v:0 4500k -maxrate:v:0 4800k \
+        -bufsize:v:0 9000k -preset fast -g 60 -sc_threshold 0 \
+    -map "[v2out]" -c:v:1 libx264 -b:v:1 2500k -maxrate:v:1 2700k \
+        -bufsize:v:1 5000k -preset fast -g 60 -sc_threshold 0 \
+    -map "[v3out]" -c:v:2 libx264 -b:v:2 1200k -maxrate:v:2 1400k \
+        -bufsize:v:2 2400k -preset fast -g 60 -sc_threshold 0 \
+    -map "[v4out]" -c:v:3 libx264 -b:v:3 600k -maxrate:v:3 700k \
+        -bufsize:v:3 1200k -preset fast -g 60 -sc_threshold 0 \
+    \
+    -map a:0 -c:a:0 aac -b:a:0 128k \
+    -map a:0 -c:a:1 aac -b:a:1 128k \
+    -map a:0 -c:a:2 aac -b:a:2 96k \
+    -map a:0 -c:a:3 aac -b:a:3 64k \
+    \
+    -f hls \
+    -hls_time 4 \
+    -hls_list_size 10 \
+    -hls_flags independent_segments \
+    -master_pl_name master.m3u8 \
+    -var_stream_map "v:0,a:0 v:1,a:1 v:2,a:2 v:3,a:3" \
+    stream_%v/playlist.m3u8
+```
+
+生成的目录结构：
+
+```
+output/
+├── master.m3u8          # 主播放列表（指向各码率子列表）
+├── stream_0/            # 1080p @ 4500k
+│   ├── playlist.m3u8
+│   ├── segment_000.ts
+│   └── ...
+├── stream_1/            # 720p @ 2500k
+├── stream_2/            # 480p @ 1200k
+└── stream_3/            # 360p @ 600k
+```
+
+### 15.3 master.m3u8 格式
+
+```
+#EXTM3U
+#EXT-X-VERSION:3
+
+#EXT-X-STREAM-INF:BANDWIDTH=4628000,RESOLUTION=1920x1080
+stream_0/playlist.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=2628000,RESOLUTION=1280x720
+stream_1/playlist.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=1296000,RESOLUTION=854x480
+stream_2/playlist.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=664000,RESOLUTION=640x360
+stream_3/playlist.m3u8
+```
+
+播放器（如 hls.js、VLC、Safari）读取 `master.m3u8`，根据带宽自动选择合适的子列表。
+
+### 15.4 码率梯度设计参考
+
+| 档位 | 分辨率 | 视频码率 | 音频码率 | 目标带宽 |
+|------|--------|---------|---------|---------|
+| 超清 | 1080p | 4500 kbps | 128 kbps | ≥5 Mbps |
+| 高清 | 720p | 2500 kbps | 128 kbps | ≥3 Mbps |
+| 标清 | 480p | 1200 kbps | 96 kbps | ≥1.5 Mbps |
+| 流畅 | 360p | 600 kbps | 64 kbps | ≥0.8 Mbps |
+| 极速 | 240p | 300 kbps | 48 kbps | ≥0.4 Mbps |
+
+关键约束：**所有码率档位必须使用相同的 GOP 大小和关键帧对齐**（`-g 60 -sc_threshold 0`），否则切换时会出现画面跳帧。
+
+---
+
+## 十六、常见问题排查
+
+### 16.1 画面绿屏 / 花屏
+
+```
+原因: 像素格式不匹配或编码器/解码器不一致
+常见于: 硬件编码输出 NV12 但解码端期望 YUV420P
+
+诊断:
+  ffprobe -show_streams input | grep pix_fmt
+
+解决:
+  # 强制像素格式转换
+  ffmpeg -i input -pix_fmt yuv420p -c:v libx264 output.mp4
+
+  # GStreamer 添加 videoconvert
+  ... ! videoconvert ! video/x-raw, format=NV12 ! ...
+```
+
+### 16.2 RTSP 拉流频繁卡顿
+
+```
+原因: 默认 UDP 传输在丢包时无重传
+
+诊断:
+  # 检查丢包
+  ffmpeg -rtsp_transport udp -i rtsp://... -f null - 2>&1 | grep "error"
+
+解决:
+  # 切换到 TCP 传输（牺牲少量延迟换取可靠性）
+  ffmpeg -rtsp_transport tcp -i rtsp://camera/stream -c copy output.mp4
+
+  # 或增大 UDP 缓冲
+  ffmpeg -buffer_size 2097152 -i rtsp://camera/stream -c copy output.mp4
+```
+
+### 16.3 播放延迟越来越大（累积延迟）
+
+```
+原因: 播放器的 jitter buffer 持续增长，不丢弃过期帧
+
+诊断:
+  延迟从开始的 1 秒逐渐增长到 10+ 秒
+
+解决:
+  # FFplay: 禁用缓冲 + 丢帧
+  ffplay -fflags nobuffer -flags low_delay -framedrop \
+      -analyzeduration 0 -probesize 32 \
+      rtsp://server/stream
+
+  # GStreamer: 禁用同步
+  ... ! autovideosink sync=false
+
+  # VLC: 最小缓存
+  vlc --network-caching=50 --clock-jitter=0 rtsp://server/stream
+```
+
+### 16.4 WebRTC 在公网连不通
+
+```
+原因: 对称型 NAT 导致 STUN 打洞失败，且未配置 TURN 服务器
+
+诊断:
+  浏览器 F12 → Console → 查看 ICE candidate 状态
+  如果只有 host candidate 没有 srflx/relay → STUN/TURN 配置问题
+
+解决:
+  1. 添加 STUN 服务器配置（见第十三章）
+  2. 部署 coturn TURN 服务器
+  3. MediaMTX 配置 webrtcAdditionalHosts 为公网 IP
+  4. 防火墙放行 UDP 3478(STUN/TURN) + 8889(WebRTC) + 8189(ICE)
+```
+
+### 16.5 NVENC 编码失败
+
+```
+原因 1: "No NVENC capable devices found"
+  → NVIDIA 驱动未安装或版本太旧
+  解决: nvidia-smi 确认 GPU 状态，更新驱动到 535+
+
+原因 2: "OpenEncodeSessionEx failed: out of memory"
+  → 消费级 GPU 有并发编码会话限制（GeForce 限制 5 路）
+  解决: 减少同时编码的路数，或使用 Quadro/Tesla（无限制）
+  解决(非官方): nvidia-patch 解除限制
+       https://github.com/keylase/nvidia-patch
+
+原因 3: "No capable devices found" (FFmpeg)
+  → FFmpeg 编译时未启用 NVENC
+  解决:
+  ffmpeg -encoders 2>/dev/null | grep nvenc
+  # 如果无输出，需要重新编译 FFmpeg 或安装预编译版本
+```
+
+### 16.6 推流后无声音
+
+```
+原因: 源文件音频编码不被目标容器支持
+
+诊断:
+  ffprobe input.mp4  # 查看音频编码
+  # 如果是 PCM/FLAC 等推到 RTMP → 不支持
+
+解决:
+  # 转码音频为 AAC
+  ffmpeg -i input -c:v copy -c:a aac -b:a 128k \
+      -f flv rtmp://server/live/stream
+
+  # 如果不需要音频
+  ffmpeg -i input -c:v copy -an \
+      -f flv rtmp://server/live/stream
+```
+
+### 16.7 FFmpeg 推流报 "muxer does not support non seekable output"
+
+```
+原因: 容器格式不支持流式输出（如 MP4 需要 moov atom 在文件尾部）
+
+解决:
+  # RTMP 必须用 FLV 容器
+  ffmpeg -i input -c copy -f flv rtmp://server/live/stream
+
+  # SRT/RTP 必须用 MPEGTS 容器
+  ffmpeg -i input -c copy -f mpegts "srt://server:9000"
+
+  # 如果必须用 MP4，使用 fragmented MP4
+  ffmpeg -i input -c copy -movflags frag_keyframe+empty_moov \
+      -f mp4 output.mp4
+```
+
+### 16.8 GStreamer 管线启动后无画面
+
+```
+原因: Caps 协商失败（元素之间的格式不匹配）
+
+诊断:
+  GST_DEBUG=3 gst-launch-1.0 ... 2>&1 | grep -i "not negotiated\|error"
+
+解决:
+  # 在格式不确定的位置添加 videoconvert / videoscale
+  ... ! videoconvert ! videoscale ! video/x-raw,width=1920,height=1080 ! ...
+
+  # 查看元素支持的 Caps
+  gst-inspect-1.0 nvv4l2h264enc
+```
+
+---
+
+## 十七、参考资源
 
 1. **FFmpeg 官方文档**: [ffmpeg.org](https://ffmpeg.org/documentation.html)
 2. **FFmpeg NVIDIA GPU 加速**: [docs.nvidia.com/video-codec-sdk](https://docs.nvidia.com/video-technologies/video-codec-sdk/12.2/pdf/Using_FFmpeg_with_NVIDIA_GPU_Hardware_Acceleration.pdf)
@@ -1275,3 +1707,7 @@ ffmpeg -f v4l2 -i /dev/video0 \
 10. **2026 流媒体协议对比**: [antmedia.io/streaming-protocols](https://antmedia.io/streaming-protocols/)
 11. **Jetson GStreamer 实时视频**: [roboticsknowledgebase.com/gstreamer-jetson](https://roboticsknowledgebase.com/wiki/networking/gstreamer-jetson-realtime-video/)
 12. **Jetson RTSP→HLS 实战**: [prometeo.blog/rtsp-to-hls-gstreamer-jetson-orin](https://prometeo.blog/practical-case-rtsp-to-hls-via-gstreamer-on-jetson-orin/)
+13. **WebRTC 原理详解（开源书）**: [webrtcforthecurious.com](https://webrtcforthecurious.com/)
+14. **coturn TURN 服务器**: [github.com/coturn/coturn](https://github.com/coturn/coturn)
+15. **FFmpeg HLS 多码率输出**: [ffmpeg.org/ffmpeg-formats/hls](https://ffmpeg.org/ffmpeg-formats.html#hls-2)
+16. **Apple HLS 规范**: [developer.apple.com/streaming](https://developer.apple.com/streaming/)
