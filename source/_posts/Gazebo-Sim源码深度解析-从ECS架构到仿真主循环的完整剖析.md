@@ -1,6 +1,7 @@
 ---
-title: Gazebo Sim 源码深度解析：从 ECS 架构到仿真主循环的完整剖析
+title: Gazebo Sim 源码深度解析：从 ECS 架构到组件生态与实战
 date: 2026-04-21 23:30:00
+updated: 2026-04-22 01:00:00
 categories:
   - 仿真
   - 机器人
@@ -13,15 +14,22 @@ tags:
   - 插件系统
   - SimulationRunner
   - EntityComponentManager
+  - gz-transport
+  - gz-sensors
+  - gz-physics
+  - gz-rendering
+  - MulticopterMotorModel
   - ROS2
   - PX4
   - SITL
   - SDF
   - 机器人仿真
+  - 无人机仿真
 ---
 
 > **源码版本**：Gazebo Sim 10 (Jetty)，对应仓库 [gazebosim/gz-sim](https://github.com/gazebosim/gz-sim)
 > **参考**：[Zread - gz-sim 源码解读](https://zread.ai/gazebosim/gz-sim)，[Gazebo Sim API 文档](https://gazebosim.org/api/sim/10/)
+> **本文定位**：不仅分析源码架构，还覆盖组件生态的用法和实战配置，帮助无人机开发者快速上手
 
 ---
 
@@ -1057,23 +1065,593 @@ SimulationRunner::Run
 
 ---
 
-## 十四、与 Gazebo Classic 的架构对比
+## 十四、Gazebo Sim 相比 Classic 的核心优势
 
-| 特性 | Gazebo Classic | Gazebo Sim |
-|------|---------------|------------|
-| 架构模式 | 面向对象（继承层次） | ECS（数据驱动） |
-| 物理引擎 | 内置 ODE，可选 Bullet/DART/Simbody | 通过 gz-physics 抽象，插件化 |
-| 渲染引擎 | OGRE 1.x | OGRE 2.x（通过 gz-rendering） |
-| 传感器 | 内置于核心 | 独立库 gz-sensors |
-| 通信 | 自定义 TCP | gz-transport（protobuf） |
-| 分布式 | 不支持 | Primary/Secondary Runner |
-| 插件 API | World/Model/Sensor Plugin | 统一的 System 接口 |
-| Python 支持 | 有限 | 完整（pybind11） |
-| 日志回放 | 有限 | 完整（序列化状态） |
+很多开发者对"为什么要从 Gazebo Classic 迁移到 Gazebo Sim"感到困惑。下面从实际开发体验出发，解释每个架构差异带来的**具体好处**。
+
+### 14.1 架构对比总览
+
+| 特性 | Gazebo Classic | Gazebo Sim | **对开发者的实际好处** |
+|------|---------------|------------|---------------------|
+| 架构模式 | 面向对象（继承层次） | ECS（数据驱动） | 添加新功能不需要修改核心代码，只需组合 Component |
+| 物理引擎 | 内置 ODE，可选 Bullet/DART/Simbody | 通过 gz-physics 抽象，插件化 | 一行 SDF 配置切换物理引擎，对比不同引擎的仿真精度 |
+| 渲染引擎 | OGRE 1.x | OGRE 2.x（通过 gz-rendering） | PBR 材质、全局光照、更真实的阴影——视觉制导仿真质量大幅提升 |
+| 传感器 | 内置于核心 | 独立库 gz-sensors | 可独立测试传感器，不需要启动完整仿真 |
+| 通信 | 自定义 TCP | gz-transport（protobuf） | 跨进程、跨机器通信，原生支持 protobuf 序列化 |
+| 分布式仿真 | 不支持 | Primary/Secondary Runner | 大规模蜂群仿真可分布到多台机器 |
+| 插件 API | World/Model/Sensor Plugin（3 套 API） | 统一的 System 接口 | 只需学习一套接口，PreUpdate/Update/PostUpdate 覆盖所有需求 |
+| Python 支持 | 有限 | 完整（pybind11） | 直接用 Python 编写 System 插件，适合快速原型验证 |
+| 日志/回放 | 有限 | 完整的状态序列化 | 精确回放任意时间点的仿真状态，便于调试和回归测试 |
+| 并行执行 | 单线程 | PostUpdate 多线程并行 | 多传感器场景（相机+LiDAR+IMU）性能显著提升 |
+
+### 14.2 ECS 对无人机开发者的具体好处
+
+在 Gazebo Classic 中，如果你想给无人机添加一个自定义的气动力模型，你需要继承 `ModelPlugin`，在 `Load()` 中获取 Link 指针，在 `OnUpdate()` 中施加力。但如果你同时还想读取这个力的结果来做日志记录，你需要再写一个单独的插件或者在同一个插件中塞入日志逻辑。
+
+在 Gazebo Sim 中，**关注点天然分离**：
+- **施加力** → 写一个实现 `ISystemPreUpdate` 的 System，优先级设为 `kPrePhysicsPriority`
+- **记录日志** → 写一个实现 `ISystemPostUpdate` 的 System，自动并行执行
+- 两个 System 通过 ECM 中的 Component 隐式通信，完全解耦
+
+### 14.3 物理引擎切换
+
+Gazebo Sim 通过 gz-physics 的 Feature 抽象层，可以在 SDF 中一行配置切换物理引擎：
+
+```xml
+<!-- 使用 DART（默认，适合多体动力学） -->
+<physics name="1ms" type="dart">
+  <max_step_size>0.001</max_step_size>
+  <real_time_factor>1.0</real_time_factor>
+</physics>
+
+<!-- 使用 Bullet Featherstone（适合高速碰撞检测） -->
+<physics name="1ms" type="bullet">
+  <max_step_size>0.001</max_step_size>
+  <real_time_factor>1.0</real_time_factor>
+</physics>
+```
+
+对截击机仿真的意义：可以用 DART 做常规飞行测试，用 Bullet Featherstone 做高速碰撞场景测试，同一套 SDF 模型无需任何修改。
+
+### 14.4 渲染质量提升
+
+Gazebo Classic 使用 OGRE 1.x，光照和材质效果有限。Gazebo Sim 使用 OGRE 2.x，支持：
+- **PBR（Physically Based Rendering）材质**：金属度/粗糙度工作流
+- **全局光照**：更真实的间接照明
+- **级联阴影贴图**：高质量实时阴影
+- **GPU 传感器噪声**：相机噪声在 GPU 着色器中实现，不影响 CPU 性能
+
+对视觉制导截击机的仿真尤为重要——更真实的渲染意味着视觉算法在仿真中的表现更接近真实世界。
 
 ---
 
-## 十五、参考资源
+## 十五、Gazebo 组件生态与用法详解
+
+Gazebo Sim 不是一个单体应用，而是由多个独立库组成的生态系统。理解这些组件才能真正发挥 Gazebo Sim 的能力。
+
+### 15.1 生态系统总览
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    gz-sim (本文核心)                   │
+│     Server / SimulationRunner / ECM / Systems        │
+├──────────────────────────────────────────────────────┤
+│                    依赖的库                            │
+│                                                      │
+│  gz-physics    gz-rendering   gz-sensors             │
+│  (物理引擎)    (渲染引擎)     (传感器模拟)            │
+│                                                      │
+│  gz-transport  gz-msgs       gz-gui                  │
+│  (通信层)      (消息定义)    (GUI 框架)              │
+│                                                      │
+│  gz-math       gz-common     gz-fuel-tools           │
+│  (数学库)      (通用工具)    (模型下载)              │
+│                                                      │
+│  gz-plugin     SDFormat      gz-tools                │
+│  (插件加载)    (场景描述)    (CLI 工具)              │
+└──────────────────────────────────────────────────────┘
+```
+
+### 15.2 gz-transport：通信层
+
+gz-transport 是 Gazebo 生态的"神经系统"，基于 ZeroMQ + protobuf 实现跨进程通信。
+
+#### 发布者示例
+
+```cpp
+#include <gz/transport/Node.hh>
+#include <gz/msgs/actuators.pb.h>
+
+gz::transport::Node node;
+auto pub = node.Advertise<gz::msgs::Actuators>("/X3/command/motor_speed");
+
+gz::msgs::Actuators msg;
+msg.mutable_velocity()->Resize(4, 0);
+msg.set_velocity(0, 700.0);
+msg.set_velocity(1, 700.0);
+msg.set_velocity(2, 700.0);
+msg.set_velocity(3, 700.0);
+
+pub.Publish(msg);
+```
+
+#### 订阅者示例
+
+```cpp
+#include <gz/transport/Node.hh>
+#include <gz/msgs/imu.pb.h>
+
+void OnImu(const gz::msgs::IMU &_msg)
+{
+    auto lin = _msg.linear_acceleration();
+    auto ang = _msg.angular_velocity();
+    std::cout << "Accel: " << lin.x() << ", " << lin.y() << ", " << lin.z()
+              << " | Gyro: " << ang.x() << ", " << ang.y() << ", " << ang.z()
+              << std::endl;
+}
+
+gz::transport::Node node;
+node.Subscribe("/imu", OnImu);
+gz::transport::waitForShutdown();
+```
+
+#### CMakeLists.txt 构建配置
+
+```cmake
+cmake_minimum_required(VERSION 3.20)
+project(my_gz_app)
+
+find_package(gz-transport13 REQUIRED)
+find_package(gz-msgs10 REQUIRED)
+
+add_executable(my_subscriber subscriber.cc)
+target_link_libraries(my_subscriber
+    gz-transport13::gz-transport13
+    gz-msgs10::gz-msgs10)
+```
+
+### 15.3 gz CLI 工具：调试利器
+
+Gazebo Sim 提供了一套强大的命令行工具，是仿真调试的核心手段。
+
+#### 主题（Topic）操作
+
+```bash
+# 列出所有活跃主题
+gz topic -l
+
+# 查看主题信息（消息类型、发布频率等）
+gz topic -i -t /world/quadcopter/stats
+
+# 实时监听主题数据（相当于 rostopic echo）
+gz topic -e -t /imu
+
+# 查看主题发布频率
+gz topic -z -t /imu
+
+# 发布消息（控制电机转速）
+gz topic -t /X3/gazebo/command/motor_speed \
+         --msgtype gz.msgs.Actuators \
+         -p 'velocity:[700, 700, 700, 700]'
+```
+
+#### 模型（Model）操作
+
+```bash
+# 列出仿真中的所有模型
+gz model --list
+
+# 查看模型详细信息（链接、关节、传感器）
+gz model -m X3
+
+# 查看模型位姿
+gz model -m X3 --pose
+
+# 查看特定链接的惯性参数
+gz model -m X3 --link base_link
+
+# 查看关节信息
+gz model -m X3 --joint rotor_0_joint
+```
+
+#### 服务（Service）操作
+
+```bash
+# 列出所有可用服务
+gz service -l
+
+# 调用服务（如暂停仿真）
+gz service -s /world/quadcopter/control \
+           --reqtype gz.msgs.WorldControl \
+           --reptype gz.msgs.Boolean \
+           --timeout 2000 \
+           --req 'pause: true'
+```
+
+#### Fuel 模型管理
+
+```bash
+# 列出 Fuel 上可用的模型
+gz fuel list -t model -o OpenRobotics
+
+# 下载模型到本地
+gz fuel download -u https://fuel.gazebosim.org/1.0/OpenRobotics/models/X3%20UAV
+```
+
+### 15.4 传感器噪声模型配置
+
+Gazebo Sim 通过 SDF 的 `<noise>` 标签为传感器添加高斯噪声，这对 Sim-to-Real 至关重要。
+
+#### IMU 噪声配置
+
+```xml
+<sensor name="imu_sensor" type="imu">
+  <always_on>1</always_on>
+  <update_rate>400</update_rate>
+  <imu>
+    <angular_velocity>
+      <x><noise type="gaussian">
+        <mean>0.0</mean>
+        <stddev>0.0002</stddev>
+        <bias_mean>0.0000075</bias_mean>
+        <bias_stddev>0.0000008</bias_stddev>
+      </noise></x>
+      <!-- y, z 类似配置 -->
+    </angular_velocity>
+    <linear_acceleration>
+      <x><noise type="gaussian">
+        <mean>0.0</mean>
+        <stddev>0.017</stddev>
+        <bias_mean>0.1</bias_mean>
+        <bias_stddev>0.001</bias_stddev>
+      </noise></x>
+      <!-- y, z 类似配置 -->
+    </linear_acceleration>
+  </imu>
+</sensor>
+```
+
+#### 相机噪声配置
+
+```xml
+<sensor name="camera_sensor" type="camera">
+  <update_rate>30</update_rate>
+  <camera>
+    <horizontal_fov>1.047</horizontal_fov>
+    <image>
+      <width>640</width>
+      <height>480</height>
+    </image>
+    <noise>
+      <type>gaussian</type>
+      <mean>0.0</mean>
+      <stddev>0.007</stddev>
+    </noise>
+  </camera>
+</sensor>
+```
+
+#### LiDAR 噪声配置
+
+```xml
+<sensor name="lidar" type="gpu_lidar">
+  <update_rate>10</update_rate>
+  <lidar>
+    <scan>
+      <horizontal>
+        <samples>640</samples>
+        <resolution>1</resolution>
+        <min_angle>-1.396263</min_angle>
+        <max_angle>1.396263</max_angle>
+      </horizontal>
+    </scan>
+    <range>
+      <min>0.08</min>
+      <max>10.0</max>
+      <resolution>0.01</resolution>
+    </range>
+    <noise>
+      <type>gaussian</type>
+      <mean>0.0</mean>
+      <stddev>0.01</stddev>
+    </noise>
+  </lidar>
+</sensor>
+```
+
+### 15.5 MulticopterMotorModel：多旋翼电机模型详解
+
+`MulticopterMotorModel` 是无人机仿真中最关键的 System 插件。它将转速指令转换为推力和力矩，施加到旋翼链接上。
+
+#### 完整参数配置
+
+```xml
+<plugin filename="gz-sim-multicopter-motor-model-system"
+        name="gz::sim::systems::MulticopterMotorModel">
+  <!-- 命名空间（区分多机） -->
+  <robotNamespace>X3</robotNamespace>
+
+  <!-- 关节和链接（必须与 SDF 模型中的名称一致） -->
+  <jointName>X3/rotor_0_joint</jointName>
+  <linkName>X3/rotor_0</linkName>
+
+  <!-- 旋转方向：ccw（逆时针）或 cw（顺时针） -->
+  <turningDirection>ccw</turningDirection>
+
+  <!-- 电机动力学时间常数 -->
+  <timeConstantUp>0.0125</timeConstantUp>     <!-- 加速时间常数（秒） -->
+  <timeConstantDown>0.025</timeConstantDown>   <!-- 减速时间常数（秒） -->
+
+  <!-- 最大转速（rad/s） -->
+  <maxRotVelocity>800.0</maxRotVelocity>
+
+  <!-- ★ 核心物理参数 -->
+  <!-- 推力系数：T = motorConstant × ω² -->
+  <motorConstant>8.54858e-06</motorConstant>
+  <!-- 力矩系数：M = momentConstant × T -->
+  <momentConstant>0.016</momentConstant>
+  <!-- 旋翼阻力系数 -->
+  <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+  <!-- 滚动力矩系数 -->
+  <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+
+  <!-- 通信主题 -->
+  <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+  <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+
+  <!-- 执行器编号（0-3 对应四旋翼的四个电机） -->
+  <actuator_number>0</actuator_number>
+
+  <!-- 仿真中的旋翼视觉减速（纯视觉效果，不影响物理） -->
+  <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+
+  <!-- 电机类型：velocity（转速控制）或 position -->
+  <motorType>velocity</motorType>
+</plugin>
+```
+
+#### 推力计算原理
+
+电机模型在每个 PreUpdate 步中：
+
+1. 读取指令转速 $\omega_{cmd}$ （通过 gz-transport 订阅）
+2. 通过一阶滤波器模拟电机动态响应：
+
+$$\omega_{actual}(t+dt) = \omega_{actual}(t) + \frac{dt}{\tau} (\omega_{cmd} - \omega_{actual}(t))$$
+
+3. 计算推力和力矩：
+
+$$T = k_T \cdot \omega^2_{actual}$$
+
+$$M = k_M \cdot T$$
+
+其中 $k_T$ = `motorConstant`，$k_M$ = `momentConstant`，$\tau$ = `timeConstantUp/Down`
+
+### 15.6 完整四旋翼世界文件示例
+
+以下是一个来自官方示例的完整 SDF 世界文件（`examples/worlds/quadcopter.sdf`），包含了所有必要的 System 插件：
+
+```xml
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="quadcopter">
+    <!-- 物理引擎配置：1ms 步长 -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- ====== 必要的 World 级 System 插件 ====== -->
+
+    <!-- 物理引擎 -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics">
+    </plugin>
+
+    <!-- 用户指令处理（GUI 交互） -->
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands">
+    </plugin>
+
+    <!-- 场景广播（GUI 渲染需要） -->
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+
+    <!-- IMU 传感器系统 -->
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu">
+    </plugin>
+
+    <!-- 气压传感器系统 -->
+    <plugin filename="gz-sim-air-pressure-system"
+            name="gz::sim::systems::AirPressure">
+    </plugin>
+
+    <!-- 光照 -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- 地面 -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 从 Fuel 加载 X3 四旋翼模型 -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/X3 UAV/4</uri>
+
+      <!-- 每个旋翼一个 MulticopterMotorModel 插件 -->
+      <plugin filename="gz-sim-multicopter-motor-model-system"
+              name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>X3</robotNamespace>
+        <jointName>X3/rotor_0_joint</jointName>
+        <linkName>X3/rotor_0</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0125</timeConstantUp>
+        <timeConstantDown>0.025</timeConstantDown>
+        <maxRotVelocity>800.0</maxRotVelocity>
+        <motorConstant>8.54858e-06</motorConstant>
+        <momentConstant>0.016</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>0</actuator_number>
+        <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+        <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <!-- rotor_1, rotor_2, rotor_3 配置类似，注意 turningDirection 交替 -->
+    </include>
+  </world>
+</sdf>
+```
+
+**运行与控制**：
+
+```bash
+# 启动仿真
+gz sim quadcopter.sdf
+
+# 另一个终端：发送电机转速指令让四旋翼起飞
+gz topic -t /X3/gazebo/command/motor_speed \
+         --msgtype gz.msgs.Actuators \
+         -p 'velocity:[700, 700, 700, 700]'
+
+# 停止电机
+gz topic -t /X3/gazebo/command/motor_speed \
+         --msgtype gz.msgs.Actuators \
+         -p 'velocity:[0, 0, 0, 0]'
+
+# 查看 IMU 数据
+gz topic -e -t /imu
+
+# 查看模型位姿
+gz model -m X3 --pose
+```
+
+### 15.7 完整自定义 System 插件（含 CMake 构建）
+
+第十二节给出了一个不完整的示例，这里补充完整版，包括施加外部风力扰动和构建配置。
+
+#### wind_disturbance.cc
+
+```cpp
+#include <gz/sim/System.hh>
+#include <gz/sim/Model.hh>
+#include <gz/sim/Link.hh>
+#include <gz/sim/Util.hh>
+#include <gz/plugin/Register.hh>
+#include <gz/math/Vector3.hh>
+
+namespace custom_systems {
+
+class WindDisturbance : public gz::sim::System,
+                        public gz::sim::ISystemConfigure,
+                        public gz::sim::ISystemPreUpdate
+{
+public:
+    void Configure(const gz::sim::Entity &_entity,
+                   const std::shared_ptr<const sdf::Element> &_sdf,
+                   gz::sim::EntityComponentManager &_ecm,
+                   gz::sim::EventManager &) override
+    {
+        this->model = gz::sim::Model(_entity);
+
+        if (_sdf->HasElement("link_name"))
+            this->linkName = _sdf->Get<std::string>("link_name");
+        if (_sdf->HasElement("wind_force_x"))
+            this->windForce.X(_sdf->Get<double>("wind_force_x"));
+        if (_sdf->HasElement("wind_force_y"))
+            this->windForce.Y(_sdf->Get<double>("wind_force_y"));
+        if (_sdf->HasElement("wind_force_z"))
+            this->windForce.Z(_sdf->Get<double>("wind_force_z"));
+    }
+
+    void PreUpdate(const gz::sim::UpdateInfo &_info,
+                   gz::sim::EntityComponentManager &_ecm) override
+    {
+        if (_info.paused) return;
+
+        if (this->linkEntity == gz::sim::kNullEntity)
+        {
+            this->linkEntity = this->model.LinkByName(_ecm, this->linkName);
+            if (this->linkEntity == gz::sim::kNullEntity) return;
+        }
+
+        gz::sim::Link link(this->linkEntity);
+        link.AddWorldWrench(_ecm, this->windForce,
+                           gz::math::Vector3d::Zero);
+    }
+
+private:
+    gz::sim::Model model{gz::sim::kNullEntity};
+    gz::sim::Entity linkEntity{gz::sim::kNullEntity};
+    std::string linkName{"base_link"};
+    gz::math::Vector3d windForce{0, 0, 0};
+};
+
+}
+
+GZ_ADD_PLUGIN(
+    custom_systems::WindDisturbance,
+    gz::sim::System,
+    custom_systems::WindDisturbance::ISystemConfigure,
+    custom_systems::WindDisturbance::ISystemPreUpdate)
+```
+
+#### CMakeLists.txt
+
+```cmake
+cmake_minimum_required(VERSION 3.20)
+project(wind_disturbance)
+
+find_package(gz-sim8 REQUIRED)  # Harmonic 用 8，Jetty 用 10
+
+add_library(WindDisturbance SHARED wind_disturbance.cc)
+target_link_libraries(WindDisturbance gz-sim8::gz-sim8)
+```
+
+#### SDF 中使用
+
+```xml
+<model name="my_drone">
+  <!-- ... 模型定义 ... -->
+  <plugin filename="WindDisturbance"
+          name="custom_systems::WindDisturbance">
+    <link_name>base_link</link_name>
+    <wind_force_x>2.0</wind_force_x>
+    <wind_force_y>1.5</wind_force_y>
+    <wind_force_z>0.0</wind_force_z>
+  </plugin>
+</model>
+```
+
+```bash
+# 构建
+mkdir build && cd build
+cmake .. && make
+
+# 运行时指定插件搜索路径
+GZ_SIM_SYSTEM_PLUGIN_PATH=$(pwd) gz sim world.sdf
+```
+
+---
+
+## 十六、参考资源
 
 1. **源码仓库**: [github.com/gazebosim/gz-sim](https://github.com/gazebosim/gz-sim)
 2. **API 文档**: [gazebosim.org/api/sim/10/](https://gazebosim.org/api/sim/10/)
@@ -1084,3 +1662,10 @@ SimulationRunner::Run
 7. **gz-physics 库**: [github.com/gazebosim/gz-physics](https://github.com/gazebosim/gz-physics)
 8. **gz-sensors 库**: [github.com/gazebosim/gz-sensors](https://github.com/gazebosim/gz-sensors)
 9. **gz-transport 库**: [github.com/gazebosim/gz-transport](https://github.com/gazebosim/gz-transport)
+10. **gz-rendering 库**: [github.com/gazebosim/gz-rendering](https://github.com/gazebosim/gz-rendering)
+11. **gz-gui 库**: [github.com/gazebosim/gz-gui](https://github.com/gazebosim/gz-gui)
+12. **gz-fuel-tools 库**: [github.com/gazebosim/gz-fuel-tools](https://github.com/gazebosim/gz-fuel-tools)
+13. **Gazebo Fuel 模型库**: [app.gazebosim.org/fuel](https://app.gazebosim.org/fuel)
+14. **quadcopter.sdf 示例**: [gz-sim/examples/worlds/quadcopter.sdf](https://github.com/gazebosim/gz-sim/blob/master/examples/worlds/quadcopter.sdf)
+15. **gz-transport 通信教程**: [gazebosim.org/api/transport/15/messages.html](https://gazebosim.org/api/transport/15/messages.html)
+16. **MulticopterMotorModel 类文档**: [gazebosim.org/api/sim/10/classgz_1_1sim_1_1systems_1_1MulticopterMotorModel.html](https://gazebosim.org/api/sim/10/classgz_1_1sim_1_1systems_1_1MulticopterMotorModel.html)
