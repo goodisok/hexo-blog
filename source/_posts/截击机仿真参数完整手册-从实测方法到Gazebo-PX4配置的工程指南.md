@@ -708,7 +708,171 @@ $$a_{max,vertical} = g \times (\text{推重比} - 1)$$
 
 ---
 
-## 十、参考文献
+## 十、三维模型文件
+
+截击机仿真中三维模型承担两个不可替代的职责：**视觉渲染**和**碰撞检测**。如果要用真实截击机模型进行仿真，需要完成从 CAD 到 SDF 的完整工作流。
+
+### 10.1 模型文件在 SDF 中的角色
+
+SDF 中每个 `<link>` 包含独立的视觉和碰撞几何体：
+
+```xml
+<link name="base_link">
+  <!-- 渲染用：决定 Gazebo 界面中的外观 -->
+  <visual name="body_visual">
+    <geometry>
+      <mesh>
+        <uri>model://interceptor/meshes/body.dae</uri>
+        <scale>0.001 0.001 0.001</scale>  <!-- mm → m -->
+      </mesh>
+    </geometry>
+    <material>
+      <ambient>0.15 0.15 0.15 1</ambient>
+      <diffuse>0.2 0.2 0.2 1</diffuse>
+    </material>
+  </visual>
+
+  <!-- 碰撞检测用：用简化几何体，计算量小 -->
+  <collision name="body_collision">
+    <geometry>
+      <box><size>0.38 0.38 0.10</size></box>
+    </geometry>
+  </collision>
+</link>
+```
+
+**关键原则**：`<visual>` 用精细 mesh 保证外观真实；`<collision>` 用简化的几何体（box / cylinder / 凸包）保证物理引擎计算效率。不要把几十万面的 mesh 直接用于碰撞检测，会严重拖慢仿真速度。
+
+### 10.2 模型制作工作流
+
+```
+CAD 软件（SolidWorks / Fusion 360 / FreeCAD）
+    │
+    │  导出 STEP / IGES
+    ▼
+Blender / MeshLab（网格处理）
+    │
+    │  ① 减面（Decimate）：10万面 → 1-3万面
+    │  ② 拆分部件：机身、机臂、电机座、起落架 → 独立 mesh
+    │  ③ 坐标系对齐：原点 = 质心，Z 轴向上
+    │  ④ 单位统一：确认为米制
+    │  ⑤ 赋材质/UV（可选，影响外观）
+    │
+    │  导出 DAE / OBJ / STL
+    ▼
+Gazebo SDF 引用
+```
+
+#### 步骤详解
+
+**① CAD 导出**
+
+从你的机械设计 CAD 中导出整机模型。推荐导出 STEP 格式（精度无损，通用性好）：
+
+- SolidWorks：文件 → 另存为 → `.step`
+- Fusion 360：导出 → `.step`
+- FreeCAD：文件 → 导出 → `.step`
+
+**② Blender 网格处理**
+
+安装 Blender（免费开源）后导入 STEP（需要 FreeCAD-Blender 桥接，或先用 FreeCAD 转为 `.obj`）：
+
+```
+# FreeCAD 命令行转换（批处理）
+freecadcmd -c "import Part; Part.open('interceptor.step'); \
+  import Mesh; Mesh.export([FreeCAD.ActiveDocument.Objects[0]], 'interceptor.obj')"
+```
+
+在 Blender 中进行处理：
+
+- **减面**：选中模型 → Modifier → Decimate → 设置 Ratio 到面数降至 1-3 万。仿真不需要渲染级别的精度，1 万面足以呈现清晰外形
+- **拆分部件**：将机身、机臂、电机座拆成独立 mesh 文件。原因是每个电机需要独立的 `<link>` 和旋转关节
+- **坐标系**：将原点移到飞行器质心位置（与你实测的质心对齐），Z 轴向上，X 轴向前
+- **检查法线**：确保法线朝外（Blender 中 Shift+N 重新计算法线方向），否则渲染会出现面片翻转
+
+**③ 导出格式选择**
+
+| 格式 | 优点 | 缺点 | 推荐场景 |
+|------|------|------|---------|
+| `.dae`（Collada） | 支持材质、颜色、UV 贴图 | 文件较大 | **首选**，Gazebo 原生支持好 |
+| `.obj` + `.mtl` | 简单通用 | 材质支持有限 | 无复杂材质时可用 |
+| `.stl` | 最简单 | 无颜色、无材质 | 碰撞几何体或纯形状 |
+| `.glb` / `.gltf` | 现代格式，支持 PBR 材质 | Gazebo Sim 较新版本才支持 | Gazebo Harmonic+ |
+
+**④ 文件组织结构**
+
+```
+interceptor/
+├── model.config          # Gazebo 模型描述文件
+├── model.sdf             # SDF 模型定义
+└── meshes/
+    ├── body.dae           # 机身主体
+    ├── arm.dae            # 机臂（可复用，通过 SDF 中 pose 旋转）
+    ├── motor_mount.dae    # 电机座
+    ├── propeller_cw.dae   # 顺时针螺旋桨
+    ├── propeller_ccw.dae  # 逆时针螺旋桨
+    ├── landing_gear.dae   # 起落架
+    └── camera_housing.dae # 前视相机外壳
+```
+
+### 10.3 螺旋桨模型的特殊处理
+
+螺旋桨需要作为独立 `<link>` 挂载在电机关节上，仿真中会旋转：
+
+```xml
+<link name="rotor_0">
+  <pose relative_to="base_link">0.18 -0.18 0.06 0 0 0</pose>
+  <inertial>
+    <mass>0.015</mass>
+    <inertia>
+      <ixx>5e-5</ixx><iyy>5e-5</iyy><izz>1e-4</izz>
+    </inertia>
+  </inertial>
+  <visual name="propeller_visual">
+    <geometry>
+      <mesh>
+        <uri>model://interceptor/meshes/propeller_cw.dae</uri>
+      </mesh>
+    </geometry>
+  </visual>
+  <!-- 螺旋桨碰撞用圆柱近似 -->
+  <collision name="propeller_collision">
+    <geometry>
+      <cylinder><radius>0.127</radius><length>0.005</length></cylinder>
+    </geometry>
+  </collision>
+</link>
+```
+
+螺旋桨的 **惯量参数** 同样需要填写，它影响电机加减速的动态响应。可以用简单的薄板公式近似：
+
+$$I_{zz,prop} \approx \frac{1}{12} m_{prop} L_{prop}^2$$
+
+其中 $m_{prop}$ 为桨叶质量，$L_{prop}$ 为桨的直径。
+
+### 10.4 目标无人机模型
+
+截击机仿真中同样需要目标无人机的三维模型，尤其是视觉检测算法的验证依赖目标外观的真实性：
+
+- **尺寸必须准确**：决定了不同距离下目标在图像中占多少像素，直接影响检测距离
+- **外形轮廓要合理**：YOLO 等检测器学习的是目标的形状特征
+- **颜色和材质**：影响不同光照条件下的检测效果
+
+可以从 [Gazebo Fuel](https://app.gazebosim.org/fuel) 搜索现有的无人机模型，或用类似工作流从 CAD 制作。如果目标是常见消费级无人机（如 DJI 系列），网上有大量可用的 3D 模型资源（Sketchfab、GrabCAD）。
+
+### 10.5 常见问题
+
+| 问题 | 原因 | 解决方法 |
+|------|------|---------|
+| 模型加载后巨大或极小 | CAD 导出单位是 mm，SDF 默认 m | 在 `<mesh>` 中添加 `<scale>0.001 0.001 0.001</scale>` |
+| 模型表面黑色 / 透明 | 法线方向反了 | Blender 中 Shift+N 重新计算法线 |
+| 仿真巨卡 | 碰撞体用了高面数 mesh | 碰撞用简化几何体，不要用原始 mesh |
+| 模型位置偏移 | CAD 原点与 SDF 原点不一致 | Blender 中调整原点到质心 |
+| 螺旋桨不转 | joint 类型或轴向配置错误 | 检查 `<joint type="revolute">` 和 `<axis><xyz>` |
+
+---
+
+## 十一、参考文献
 
 1. **Krznar M, Kotarski D, Piljek P, et al.** On-line Inertia Measurement of Unmanned Aerial Vehicles Using On-board Sensors and Bifilar Pendulum. *Engineering Review*, 2018, 38(2): 151-160. [doi:10.30765/er.38.2.4](https://hrcak.srce.hr/file/291022)
 2. **Jardin M, Mueller E R.** Optimized Measurements of Unmanned-Air-Vehicle Mass Moment of Inertia with a Bifilar Pendulum. *Journal of Aircraft*, 2009, 46(3): 763-775.
