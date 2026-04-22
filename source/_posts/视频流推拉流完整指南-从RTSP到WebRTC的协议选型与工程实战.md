@@ -259,51 +259,395 @@ HLS 将视频切成小片段（通常 6-10 秒），通过标准 HTTP/CDN 分发
 
 ---
 
-## 三、视频编码基础
+## 三、分辨率、帧率与像素格式
 
-### 3.1 编码格式对比
+### 3.1 分辨率标准
 
-| 编码 | 标准 | 压缩效率 | 硬件支持 | 适用场景 |
-|------|------|---------|---------|---------|
-| **H.264/AVC** | 2003 | 基准 (1×) | 极广 | 兼容性优先、实时通信 |
-| **H.265/HEVC** | 2013 | 1.5-2× | 广泛 | 4K/高清存储、广播 |
-| **AV1** | 2018 | 1.5-2× | 逐步增加 | Web 视频、未来趋势 |
-| **VP9** | 2013 | ~1.4× | 有限 | YouTube、Chrome |
+分辨率决定了画面的精细程度。以下是工程中常见的分辨率标准：
 
-### 3.2 关键编码参数
+| 名称 | 分辨率 | 像素总数 | 宽高比 | 常见场景 |
+|------|--------|---------|--------|---------|
+| QVGA | 320×240 | 76,800 | 4:3 | 低端监控、嵌入式预览 |
+| VGA | 640×480 | 307,200 | 4:3 | 传统摄像头、推理输入 |
+| 720p (HD) | 1280×720 | 921,600 | 16:9 | 无人机图传、网络直播 |
+| 1080p (FHD) | 1920×1080 | 2,073,600 | 16:9 | 主流直播、监控录像 |
+| 2K (QHD) | 2560×1440 | 3,686,400 | 16:9 | 高清监控、电竞直播 |
+| 4K (UHD) | 3840×2160 | 8,294,400 | 16:9 | 专业广播、医疗影像 |
+| 8K (FUHD) | 7680×4320 | 33,177,600 | 16:9 | 超高清转播（极少） |
 
-```bash
-# H.264 编码核心参数说明
-ffmpeg -i input -c:v libx264 \
-    -preset fast \          # 编码速度 vs 质量权衡
-                            # ultrafast > superfast > veryfast > faster > fast
-                            # > medium > slow > slower > veryslow
-    -tune zerolatency \     # 低延迟调优（禁用 B 帧、减少缓冲）
-    -profile:v high \       # baseline(兼容)/main/high(质量)
-    -b:v 4000k \            # 目标码率
-    -maxrate 4500k \        # 最大码率（CBR/VBR 上限）
-    -bufsize 8000k \        # VBV 缓冲大小
-    -g 60 \                 # GOP 大小（关键帧间隔 = 帧率×秒数）
-    -keyint_min 60 \        # 最小关键帧间隔
-    -bf 0 \                 # B 帧数量（0=低延迟）
-    output.mp4
+**未压缩数据量计算**：
+
+$$\text{带宽} = \text{宽} \times \text{高} \times \text{每像素字节} \times \text{帧率}$$
+
+以 1080p@30fps YUV 4:2:0 为例：
+
+$$1920 \times 1080 \times 1.5 \times 30 = 93,312,000 \text{ Bytes/s} \approx 89 \text{ MB/s} \approx 712 \text{ Mbps}$$
+
+这就是为什么视频**必须**编码压缩——原始数据在任何网络上都无法传输。
+
+### 3.2 帧率
+
+帧率（FPS, Frames Per Second）决定画面的流畅度：
+
+| 帧率 | 体感 | 典型场景 |
+|------|------|---------|
+| 15fps | 略有卡顿 | 低带宽监控 |
+| 24fps | 电影感 | 电影拍摄 |
+| 25fps | PAL 标准 | 欧洲广播 |
+| 30fps | 流畅 | 网络直播、无人机（标准） |
+| 60fps | 非常流畅 | 电竞、高速运动、FPV |
+| 120fps | 极致流畅 | 慢动作素材、VR |
+
+帧率翻倍 ≈ 码率增加 40-70%（不是翻倍，因为帧间相似度高）。
+
+### 3.3 色彩空间与像素格式
+
+视频编码不使用 RGB，而使用 **YUV** 色彩空间：
+
+- **Y**（亮度）：人眼对亮度最敏感
+- **U/Cb**（蓝色色度）：色彩信息
+- **V/Cr**（红色色度）：色彩信息
+
+将色彩信息与亮度分离后，可以对色度进行降采样而不明显影响视觉质量：
+
+```
+YUV 4:4:4  — 每个像素都有完整的 Y、U、V
+             数据量 = 宽 × 高 × 3 字节
+             用途：专业调色、色彩关键场景
+
+YUV 4:2:2  — 水平方向每 2 个像素共享一组 UV
+             数据量 = 宽 × 高 × 2 字节
+             用途：广播级、高端录制
+
+YUV 4:2:0  — 每 2×2 的 4 个像素共享一组 UV
+             数据量 = 宽 × 高 × 1.5 字节
+             用途：绝大多数视频编码（H.264/H.265/AV1 默认）
 ```
 
-### 3.3 码率参考
+```
+YUV 4:2:0 的像素排列（4×4 示例）：
 
-| 分辨率 | 帧率 | H.264 推荐码率 | H.265 推荐码率 |
-|--------|------|---------------|---------------|
-| 720p | 30fps | 2.5-4 Mbps | 1.5-2.5 Mbps |
-| 1080p | 30fps | 4-6 Mbps | 2.5-4 Mbps |
-| 1080p | 60fps | 6-9 Mbps | 4-6 Mbps |
-| 4K | 30fps | 13-20 Mbps | 8-13 Mbps |
-| 4K | 60fps | 20-30 Mbps | 13-20 Mbps |
+Y 平面（完整分辨率）:    UV 平面（1/2 分辨率）:
+┌──┬──┬──┬──┐            ┌─────┬─────┐
+│Y │Y │Y │Y │            │U V  │U V  │
+├──┼──┼──┼──┤            ├─────┼─────┤
+│Y │Y │Y │Y │            │U V  │U V  │
+├──┼──┼──┼──┤            └─────┴─────┘
+│Y │Y │Y │Y │
+├──┼──┼──┼──┤
+│Y │Y │Y │Y │
+└──┴──┴──┴──┘
+```
+
+**位深**：
+
+| 位深 | 亮度范围 | 总数据量比 | 用途 |
+|------|---------|-----------|------|
+| 8-bit | 256 级 | 1× | 标准视频（SDR） |
+| 10-bit | 1024 级 | 1.25× | HDR、专业制作 |
+| 12-bit | 4096 级 | 1.5× | 电影母版 |
+
+FFmpeg 中的像素格式参数：
+
+```bash
+# 查看所有支持的像素格式
+ffmpeg -pix_fmts
+
+# 常用格式
+# yuv420p  — 8-bit 4:2:0（最常用）
+# yuv422p  — 8-bit 4:2:2
+# yuv420p10le — 10-bit 4:2:0（HDR）
+# nv12     — 4:2:0 半平面格式（硬件编码器常用）
+# rgb24    — RGB 24-bit（非视频编码用）
+
+# 指定像素格式
+ffmpeg -i input -c:v libx264 -pix_fmt yuv420p output.mp4
+```
 
 ---
 
-## 四、硬件编码加速
+## 四、视频编码原理
 
-### 4.1 为什么需要硬件编码
+### 4.1 为什么能压缩
+
+视频数据存在三类冗余：
+
+| 冗余类型 | 含义 | 压缩方式 |
+|---------|------|---------|
+| **空间冗余** | 同一帧内相邻像素高度相似 | 帧内预测（Intra Prediction） |
+| **时间冗余** | 相邻帧之间画面变化很小 | 帧间预测（Inter Prediction） |
+| **视觉冗余** | 人眼对某些细节不敏感 | 量化（Quantization） |
+
+编码器的核心工作就是**消除这三类冗余**。
+
+### 4.2 帧类型：I 帧、P 帧、B 帧
+
+| 帧类型 | 全称 | 编码方式 | 大小 | 作用 |
+|--------|------|---------|------|------|
+| **I 帧** | Intra Frame（关键帧） | 仅帧内预测，不参考其他帧 | 最大 | 随机访问入口点 |
+| **P 帧** | Predicted Frame | 参考前面的 I 帧或 P 帧 | 中等 | 前向预测 |
+| **B 帧** | Bi-directional Frame | 参考前后两个方向的帧 | 最小 | 双向预测，压缩率最高 |
+
+```
+时间轴 →
+I ──► P ──► B ──► B ──► P ──► B ──► B ──► I ──► P ──► ...
+│          ↑↓         │          ↑↓         │
+│     前后参考        │     前后参考        │
+└─── GOP (Group of Pictures) ───┘
+```
+
+**关键概念——GOP（图像组）**：
+
+GOP 是从一个 I 帧到下一个 I 帧之前的所有帧的集合。
+
+$$\text{GOP 大小} = \text{帧率} \times \text{关键帧间隔（秒）}$$
+
+- **GOP = 30**（30fps, 1 秒）：适合低延迟直播、需要快速 seek
+- **GOP = 60**（30fps, 2 秒）：标准直播
+- **GOP = 250**（30fps, ~8 秒）：存储/点播，压缩率优先
+
+B 帧对延迟的影响：
+
+```
+无 B 帧（-bf 0）：编码器不需要等待未来帧，延迟最低
+├── 适用：低延迟直播、FPV、遥操作
+└── 代价：压缩率降低 15-25%
+
+有 B 帧（-bf 3）：编码器需要缓存 3 帧后才能编码
+├── 适用：存储录像、点播、广播
+└── 优势：压缩率提高 15-25%
+```
+
+### 4.3 编码流程
+
+```
+原始帧 → 色彩空间转换(RGB→YUV) → 帧间/帧内预测 → 残差计算
+                                                      ↓
+输出码流 ← 熵编码(CABAC/CAVLC) ← 量化(QP控制质量) ← DCT变换
+```
+
+各环节的作用：
+
+1. **帧间/帧内预测**：用已编码的数据预测当前块，只编码"差异"（残差）
+2. **DCT 变换**：将残差从空间域变换到频率域，能量集中到少数系数
+3. **量化**：丢弃高频细节（人眼不敏感），QP 值越大丢弃越多→质量越低
+4. **熵编码**：无损压缩最终的系数（CABAC 比 CAVLC 压缩率高 ~10%，但更慢）
+
+### 4.4 编码格式深度对比
+
+| 特性 | H.264/AVC | H.265/HEVC | AV1 |
+|------|-----------|------------|-----|
+| 标准发布年份 | 2003 | 2013 | 2018 |
+| 压缩效率（vs H.264） | 1× | 1.5-2× | 1.5-2× |
+| 最大编码块 | 16×16 (Macroblock) | 64×64 (CTU) | 128×128 (Superblock) |
+| 帧内预测模式 | 9 种 | 35 种 | 57+ 种 |
+| 运动补偿精度 | 1/4 像素 | 1/4 像素 | 1/8 像素 |
+| 环路滤波 | 去块滤波 | 去块 + SAO | 去块 + CDEF + LR |
+| 熵编码 | CABAC / CAVLC | CABAC | 多符号 ANS |
+| 专利/版权费 | 需要（通过 MPEG-LA） | 需要（多个专利池） | 免版税 |
+| 硬件编码支持 | 极广 | 广泛 | NVIDIA RTX 40+, Intel 12+, Apple M3+ |
+| 硬件解码支持 | 极广 | 广泛 | 2022 年后的主流设备 |
+| 软件编码速度 | 快（x264） | 慢（x265, 约 x264 的 1/3-1/5） | 极慢（SVT-AV1, 约 x264 的 1/10） |
+| 编码复杂度 | 低 | 中 | 高 |
+
+**选型建议**：
+
+```
+需要最大兼容性？（任何设备都能播）
+└── H.264
+
+需要节省带宽/存储，且设备支持？（4K/HDR）
+└── H.265
+
+面向 Web 分发，免版税？
+└── AV1（编码慢，适合非实时/有硬编场景）
+```
+
+### 4.5 Profile 与 Level
+
+Profile 定义编码器可以使用的功能集，Level 限制计算复杂度和分辨率上限。
+
+**H.264 Profile**：
+
+| Profile | 特性 | 用途 |
+|---------|------|------|
+| **Baseline** | 无 B 帧、无 CABAC、仅 I/P 帧 | 视频通话、低延迟、移动设备 |
+| **Main** | B 帧、CABAC、加权预测 | 标准广播、中端设备 |
+| **High** | 8×8 变换、自适应量化矩阵 | 高清广播、蓝光、存储 |
+| **High 10** | 10-bit 色深 | HDR 内容 |
+
+**H.264 Level（常用）**：
+
+| Level | 最大分辨率@帧率 | 最大码率 |
+|-------|---------------|---------|
+| 3.0 | 720×480@30 | 10 Mbps |
+| 3.1 | 1280×720@30 | 14 Mbps |
+| 4.0 | 2048×1024@30 | 20 Mbps |
+| 4.1 | 2048×1024@30 | 50 Mbps |
+| 4.2 | 2048×1080@60 | 50 Mbps |
+| 5.1 | 4096×2160@30 | 300 Mbps |
+
+```bash
+# FFmpeg 指定 Profile 和 Level
+ffmpeg -i input -c:v libx264 \
+    -profile:v high -level:v 4.2 \
+    output.mp4
+
+# 低延迟直播用 Baseline
+ffmpeg -i input -c:v libx264 \
+    -profile:v baseline -level:v 3.1 \
+    -tune zerolatency \
+    output.mp4
+```
+
+### 4.6 码率控制模式
+
+码率控制决定编码器如何分配每一帧的比特预算：
+
+| 模式 | 全称 | 控制方式 | 特点 | 适用场景 |
+|------|------|---------|------|---------|
+| **CBR** | Constant Bitrate | 固定码率 | 输出码率恒定，质量波动 | 直播推流（网络带宽固定） |
+| **VBR** | Variable Bitrate | 可变码率 | 复杂场景码率高，简单场景低 | 录制存储（节省空间） |
+| **CRF** | Constant Rate Factor | 恒定质量 | 质量恒定，码率波动 | 本地录制（质量优先） |
+| **CQP** | Constant Quantization | 固定 QP 值 | 最简单，不控制码率 | 基准测试 |
+| **ABR** | Average Bitrate | 平均码率 | VBR 的一种，保证长期平均码率 | 点播视频 |
+
+```bash
+# CBR —— 直播推流（码率稳定）
+ffmpeg -i input -c:v libx264 \
+    -b:v 4000k -minrate 4000k -maxrate 4000k -bufsize 4000k \
+    output.mp4
+
+# VBR —— 录制存储（画质优先）
+ffmpeg -i input -c:v libx264 \
+    -b:v 4000k -maxrate 6000k -bufsize 8000k \
+    output.mp4
+
+# CRF —— 本地转码（恒定质量，推荐 18-28）
+ffmpeg -i input -c:v libx264 \
+    -crf 23 \
+    output.mp4
+# CRF 值含义：0=无损, 18=视觉无损, 23=默认, 28=能看, 51=最差
+
+# NVENC 的码率控制
+ffmpeg -i input -c:v h264_nvenc \
+    -rc cbr -b:v 4000k \     # CBR
+    output.mp4
+
+ffmpeg -i input -c:v h264_nvenc \
+    -rc vbr -cq 23 \         # VBR + 恒定质量
+    -b:v 4000k -maxrate 6000k \
+    output.mp4
+```
+
+**码率控制选型**：
+
+```
+直播推流？
+├── 是 → CBR（码率稳定，不会超过网络带宽）
+└── 否 → 是否关心文件大小？
+    ├── 不关心 → CRF（质量最佳）
+    └── 关心 → VBR / ABR（质量和体积平衡）
+```
+
+### 4.7 码率参考表
+
+| 分辨率 | 帧率 | H.264 推荐码率 | H.265 推荐码率 | 说明 |
+|--------|------|---------------|---------------|------|
+| 480p | 30fps | 1-2 Mbps | 0.7-1.5 Mbps | 低带宽监控 |
+| 720p | 30fps | 2.5-4 Mbps | 1.5-2.5 Mbps | 无人机标准图传 |
+| 720p | 60fps | 3.5-6 Mbps | 2-4 Mbps | 运动场景 |
+| 1080p | 30fps | 4-6 Mbps | 2.5-4 Mbps | 主流直播 |
+| 1080p | 60fps | 6-9 Mbps | 4-6 Mbps | 电竞/高速运动 |
+| 2K | 30fps | 8-12 Mbps | 5-8 Mbps | 高清监控 |
+| 4K | 30fps | 13-20 Mbps | 8-13 Mbps | 专业广播 |
+| 4K | 60fps | 20-30 Mbps | 13-20 Mbps | 顶级广播 |
+
+码率与分辨率的关系并非线性：4K 的像素数是 1080p 的 4 倍，但码率只需要 3-4 倍，因为更大的编码块能发现更多冗余。
+
+### 4.8 关键编码参数详解
+
+```bash
+# H.264 编码完整参数说明
+ffmpeg -i input -c:v libx264 \
+    -preset fast \          # 编码速度 vs 质量权衡
+                            # ultrafast > superfast > veryfast > faster > fast
+                            # > medium(默认) > slow > slower > veryslow
+                            # ultrafast 比 veryslow 快 10 倍，但码率高 50%+
+    -tune zerolatency \     # 调优模式：
+                            #   zerolatency — 禁用 B 帧和前瞻，低延迟
+                            #   film — 电影类内容
+                            #   animation — 动画
+                            #   grain — 保留噪点
+                            #   stillimage — 静态画面
+    -profile:v high \       # baseline/main/high（见上文）
+    -level:v 4.2 \          # 限制分辨率和码率上限
+    -pix_fmt yuv420p \      # 像素格式（几乎总是 yuv420p）
+    -b:v 4000k \            # 目标码率
+    -maxrate 4500k \        # 最大码率
+    -bufsize 8000k \        # VBV 缓冲（影响码率波动幅度）
+    -g 60 \                 # GOP 大小（关键帧间隔帧数）
+    -keyint_min 60 \        # 最小关键帧间隔
+    -bf 0 \                 # B 帧数量（0=低延迟，3=高压缩）
+    -refs 3 \               # 参考帧数量（1-16，越多越好但更慢）
+    -rc-lookahead 0 \       # 前瞻帧数（0=低延迟，40=高质量）
+    output.mp4
+```
+
+---
+
+## 五、容器格式
+
+容器格式（Container Format）不是编码格式——容器是**封装**，编码是**压缩**。同样的 H.264 视频可以装在 MP4、MKV、FLV 等不同容器中。
+
+| 容器 | 扩展名 | 支持的视频编码 | 支持的音频编码 | 流媒体 | 典型用途 |
+|------|--------|-------------|-------------|--------|---------|
+| **MP4** | .mp4 | H.264, H.265, AV1 | AAC, MP3, Opus | 支持（fMP4） | 通用存储和分发 |
+| **MKV** | .mkv | 几乎所有 | 几乎所有 | 有限 | 本地存储（灵活） |
+| **FLV** | .flv | H.264（传统）, H.265（Enhanced RTMP） | AAC, MP3 | RTMP | 直播推流 |
+| **TS** | .ts | H.264, H.265 | AAC, MP3, AC3 | HLS/广播 | 广播、HLS 切片 |
+| **fMP4** | .m4s | H.264, H.265, AV1 | AAC, Opus | CMAF/DASH | 低延迟 HLS/DASH |
+| **WebM** | .webm | VP8, VP9, AV1 | Vorbis, Opus | 支持 | Web 视频 |
+
+```bash
+# 容器转换（不重新编码，仅重新封装）
+ffmpeg -i input.mp4 -c copy output.mkv
+ffmpeg -i input.mp4 -c copy -f mpegts output.ts
+
+# 查看容器和编码信息
+ffprobe -v quiet -show_format -show_streams input.mp4
+```
+
+---
+
+## 六、音频编码
+
+视频流通常包含音频轨道，了解常用音频编码同样重要：
+
+| 编码 | 码率范围 | 延迟 | 质量 | 适用场景 |
+|------|---------|------|------|---------|
+| **AAC** | 64-320 kbps | 中等 | 好 | 通用（MP4/FLV/HLS） |
+| **Opus** | 6-510 kbps | 极低 | 极好 | WebRTC、低延迟通信 |
+| **MP3** | 128-320 kbps | 中等 | 一般 | 兼容性 |
+| **PCM** | ~1.4 Mbps | 无 | 无损 | 录音、编辑 |
+
+```bash
+# AAC 编码（最通用）
+ffmpeg -i input -c:a aac -b:a 128k output.mp4
+
+# Opus 编码（WebRTC 推荐）
+ffmpeg -i input -c:a libopus -b:a 128k output.webm
+
+# 查看音频流信息
+ffprobe -v quiet -select_streams a -show_entries \
+    stream=codec_name,sample_rate,channels,bit_rate input.mp4
+```
+
+---
+
+## 七、硬件编码加速
+
+### 7.1 为什么需要硬件编码
 
 软件编码（x264）质量好但 CPU 占用极高。1080p@30fps 的 x264 medium 可以吃满 4 核 CPU。在嵌入式设备（Jetson、树莓派）上，软编根本不可行。
 
@@ -316,7 +660,7 @@ ffmpeg -i input -c:v libx264 \
 | **VideoToolbox** | macOS/Apple Silicon | 3-5× | ~30% | 好 |
 | **nvv4l2h264enc** | Jetson | 3-4× | ~5% | 好 |
 
-### 4.2 NVIDIA NVENC
+### 7.2 NVIDIA NVENC
 
 ```bash
 # 检查 NVENC 支持
@@ -344,7 +688,7 @@ ffmpeg -hwaccel cuda -i input.mp4 \
     -f mpegts "srt://server:9000?mode=caller&latency=500000"
 ```
 
-### 4.3 Intel VAAPI / QSV
+### 7.3 Intel VAAPI / QSV
 
 ```bash
 # 检查 VAAPI 设备
@@ -364,7 +708,7 @@ ffmpeg -hwaccel qsv -i input.mp4 \
     -f flv rtmp://server:1935/live/stream
 ```
 
-### 4.4 NVIDIA Jetson（nvv4l2h264enc）
+### 7.4 NVIDIA Jetson（nvv4l2h264enc）
 
 Jetson 平台使用专用的 V4L2 编码器，CPU 占用仅 5%：
 
@@ -392,9 +736,9 @@ gst-launch-1.0 \
 
 ---
 
-## 五、FFmpeg 推拉流实战
+## 八、FFmpeg 推拉流实战
 
-### 5.1 拉流：RTSP → 本地文件
+### 8.1 拉流：RTSP → 本地文件
 
 ```bash
 # 从 IP 摄像头拉流并录制
@@ -405,7 +749,7 @@ ffmpeg -rtsp_transport tcp \
     "recording_%Y%m%d_%H%M%S.mp4"
 ```
 
-### 5.2 推流：本地文件 → RTMP
+### 8.2 推流：本地文件 → RTMP
 
 ```bash
 # 循环推流视频文件到 RTMP
@@ -416,7 +760,7 @@ ffmpeg -re -stream_loop -1 -i input.mp4 \
     -f flv rtmp://localhost:1935/live/test
 ```
 
-### 5.3 转推：RTSP → RTMP
+### 8.3 转推：RTSP → RTMP
 
 ```bash
 # IP 摄像头 RTSP 转推到直播平台
@@ -426,7 +770,7 @@ ffmpeg -rtsp_transport tcp \
     -f flv rtmp://live-push.example.com/live/stream_key
 ```
 
-### 5.4 转推：RTMP → SRT
+### 8.4 转推：RTMP → SRT
 
 ```bash
 # 协议转换：RTMP 推流转发到 SRT
@@ -435,7 +779,7 @@ ffmpeg -i rtmp://localhost:1935/live/stream \
     "srt://remote:9000?mode=caller&latency=500000&passphrase=MySecret&pbkeylen=32"
 ```
 
-### 5.5 SRT → HLS 切片
+### 8.5 SRT → HLS 切片
 
 ```bash
 # SRT 接收并切成 HLS
@@ -448,7 +792,7 @@ ffmpeg -i "srt://:9000?mode=listener&latency=500000" \
     /var/www/html/live/stream.m3u8
 ```
 
-### 5.6 摄像头采集推流
+### 8.6 摄像头采集推流
 
 ```bash
 # Linux V4L2 摄像头 → NVENC → RTMP
@@ -466,7 +810,7 @@ ffmpeg -f avfoundation -framerate 30 \
     -f flv rtmp://localhost:1935/live/camera
 ```
 
-### 5.7 多路输出（tee muxer）
+### 8.7 多路输出（tee muxer）
 
 ```bash
 # 同时推流到 RTMP + 保存本地 + SRT
@@ -481,9 +825,9 @@ ffmpeg -re -i input.mp4 \
 
 ---
 
-## 六、GStreamer 推拉流实战
+## 九、GStreamer 推拉流实战
 
-### 6.1 基本管线结构
+### 9.1 基本管线结构
 
 GStreamer 用管道（pipeline）将一系列元素（element）串联：
 
@@ -493,7 +837,7 @@ source → demux → decode → process → encode → mux → sink
 
 每个元素通过 pad 连接，数据以 buffer 形式在管线中流动。
 
-### 6.2 摄像头 → RTSP 推流
+### 9.2 摄像头 → RTSP 推流
 
 ```bash
 # USB 摄像头 → x264 → RTSP（使用 test-launch）
@@ -505,7 +849,7 @@ gst-launch-1.0 v4l2src device=/dev/video0 ! \
     udpsink host=192.168.1.10 port=5000
 ```
 
-### 6.3 Jetson 低延迟管线
+### 9.3 Jetson 低延迟管线
 
 ```bash
 # CSI 摄像头 → NVENC H.265 → UDP（Jetson 专用）
@@ -522,7 +866,7 @@ gst-launch-1.0 -e \
     udpsink host=192.168.1.10 port=5000 sync=false async=false
 ```
 
-### 6.4 接收端管线
+### 9.4 接收端管线
 
 ```bash
 # PC 端接收 H.264 RTP 流并显示
@@ -540,7 +884,7 @@ gst-launch-1.0 \
     videoconvert ! autovideosink sync=false
 ```
 
-### 6.5 GStreamer RTSP Server（Python）
+### 9.5 GStreamer RTSP Server（Python）
 
 ```python
 import gi
@@ -573,7 +917,7 @@ if __name__ == '__main__':
     GLib.MainLoop().run()
 ```
 
-### 6.6 GStreamer + OpenCV 联合使用
+### 9.6 GStreamer + OpenCV 联合使用
 
 ```python
 import cv2
@@ -610,9 +954,9 @@ while cap.isOpened():
 
 ---
 
-## 七、MediaMTX：一站式媒体服务器
+## 十、MediaMTX：一站式媒体服务器
 
-### 7.1 简介
+### 10.1 简介
 
 [MediaMTX](https://github.com/bluenviron/mediamtx)（前身 rtsp-simple-server）是一个零依赖、单文件的媒体服务器，支持所有主流协议之间的自动转换。
 
@@ -624,7 +968,7 @@ while cap.isOpened():
 SRT / WebRTC(WHEP) / RTSP / RTMP / HLS
 ```
 
-### 7.2 部署
+### 10.2 部署
 
 ```bash
 # Docker（推荐）
@@ -644,7 +988,7 @@ tar xzf mediamtx_v1.17.1_linux_amd64.tar.gz
 - SRT: 8890
 - API: 9997
 
-### 7.3 推流
+### 10.3 推流
 
 ```bash
 # FFmpeg RTSP 推流
@@ -670,7 +1014,7 @@ gst-launch-1.0 rtspclientsink name=s location=rtsp://localhost:8554/mystream \
 # 即可通过所有协议拉流
 ```
 
-### 7.4 拉流
+### 10.4 拉流
 
 ```bash
 # VLC RTSP 拉流
@@ -689,7 +1033,7 @@ ffmpeg -i "srt://localhost:8890?streamid=read:mystream" -c copy output.ts
 # 打开 http://localhost:8889/mystream/
 ```
 
-### 7.5 核心配置
+### 10.5 核心配置
 
 ```yaml
 # mediamtx.yml
@@ -742,7 +1086,7 @@ paths:
     recordFormat: fmp4
 ```
 
-### 7.6 协议自动转换矩阵
+### 10.6 协议自动转换矩阵
 
 | 推流方式 | RTSP 拉 | RTMP 拉 | HLS 拉 | WebRTC 拉 | SRT 拉 |
 |---------|---------|---------|--------|----------|--------|
@@ -756,9 +1100,9 @@ paths:
 
 ---
 
-## 八、无人机 / 机器人低延迟视频方案
+## 十一、无人机 / 机器人低延迟视频方案
 
-### 8.1 延迟预算分析
+### 11.1 延迟预算分析
 
 对于无人机 FPV 或机器人遥操作，端到端延迟（Glass-to-Glass）通常要求 < 200ms：
 
@@ -772,7 +1116,7 @@ paths:
 | 渲染 | 1-16ms | 1ms |
 | **总计** | **22-2159ms** | **18-31ms** |
 
-### 8.2 推荐方案
+### 11.2 推荐方案
 
 **方案 A：裸 RTP/UDP（最低延迟，局域网）**
 
@@ -826,7 +1170,7 @@ ffmpeg -f v4l2 -video_size 1280x720 -framerate 30 -i /dev/video0 \
 
 端到端延迟：**~300-800ms**（含浏览器渲染）
 
-### 8.3 方案对比
+### 11.3 方案对比
 
 | | 裸 RTP/UDP | SRT | WebRTC |
 |---|-----------|-----|--------|
@@ -839,9 +1183,9 @@ ffmpeg -f v4l2 -video_size 1280x720 -framerate 30 -i /dev/video0 \
 
 ---
 
-## 九、性能优化最佳实践
+## 十二、性能优化最佳实践
 
-### 9.1 降低编码延迟
+### 12.1 降低编码延迟
 
 ```bash
 # x264 低延迟配置
@@ -855,7 +1199,7 @@ nvv4l2h264enc maxperf-enable=1 control-rate=1 \
     insert-sps-pps=true iframeinterval=15 EnableTwopassCBR=false
 ```
 
-### 9.2 降低拉流延迟
+### 12.2 降低拉流延迟
 
 ```bash
 # FFplay 低延迟播放
@@ -876,7 +1220,7 @@ gst-launch-1.0 udpsrc port=5000 \
     autovideosink sync=false
 ```
 
-### 9.3 网络优化
+### 12.3 网络优化
 
 ```bash
 # 增大 UDP 缓冲区（Linux）
@@ -894,7 +1238,7 @@ ffmpeg -i input -f mpegts "udp://192.168.1.10:5000?buffer_size=2621440"
 # 公网 RTT ~100ms → latency=400000 (400ms)
 ```
 
-### 9.4 诊断工具
+### 12.4 诊断工具
 
 ```bash
 # 检查可用硬件编码器
@@ -917,7 +1261,7 @@ ffmpeg -f v4l2 -i /dev/video0 \
 
 ---
 
-## 十、参考资源
+## 十三、参考资源
 
 1. **FFmpeg 官方文档**: [ffmpeg.org](https://ffmpeg.org/documentation.html)
 2. **FFmpeg NVIDIA GPU 加速**: [docs.nvidia.com/video-codec-sdk](https://docs.nvidia.com/video-technologies/video-codec-sdk/12.2/pdf/Using_FFmpeg_with_NVIDIA_GPU_Hardware_Acceleration.pdf)
