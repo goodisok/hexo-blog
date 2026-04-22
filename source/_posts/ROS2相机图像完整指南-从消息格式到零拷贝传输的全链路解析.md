@@ -69,7 +69,7 @@ uint8[] data               # 原始像素数据
 
 ### 1.3 编码选择指南
 
-```mermaid
+{% mermaid %}
 flowchart TD
     A{需要深度学习推理?} -->|是| B["rgb8（大多数模型训练用 RGB）"]
     A -->|否| C{需要 OpenCV 处理?}
@@ -79,7 +79,7 @@ flowchart TD
     E -->|否| G{来自 Bayer 传感器?}
     G -->|是| H["bayer_*（让 image_proc 去拜耳化）"]
     G -->|否| I["mono8（灰度足够时减少带宽）"]
-```
+{% endmermaid %}
 
 ### 1.4 CompressedImage 消息
 
@@ -541,14 +541,14 @@ container = ComposableNodeContainer(
 
 对于 Bayer 编码的工业相机，典型的预处理管线是：
 
-```mermaid
+{% mermaid %}
 flowchart TD
     A["相机驱动"] -->|"image_raw (bayer_rggb8)"| B["DebayerNode"]
     B -->|"image_mono (mono8)"| C1["灰度处理节点"]
     B -->|"image_color (bgr8)"| D["RectifyNode + camera_info"]
     D -->|"image_rect_color (bgr8, 已校正)"| E["ResizeNode"]
     E -->|"resize/image (320×240)"| F["推理节点（YOLO 等）"]
-```
+{% endmermaid %}
 
 ---
 
@@ -760,7 +760,7 @@ ComposableNode(
 
 Isaac ROS 使用 NITROS（NVIDIA Isaac Transport for ROS）实现 GPU 内存的零拷贝传输。图像数据始终保留在 GPU 显存中，不需要 GPU↔CPU 之间的数据搬运：
 
-```mermaid
+{% mermaid %}
 flowchart LR
     A["相机"] -->|"上传"| B["GPU 显存"]
     B -->|"零拷贝"| C["畸变校正\n(GPU)"]
@@ -770,7 +770,7 @@ flowchart LR
     style C fill:#76b900,color:#fff
     style D fill:#76b900,color:#fff
     style E fill:#76b900,color:#fff
-```
+{% endmermaid %}
 
 ### 9.3 使用 OpenCV CUDA
 
@@ -940,7 +940,7 @@ def generate_launch_description():
 
 ### 11.2 架构图
 
-```mermaid
+{% mermaid %}
 flowchart TD
     A["USB 相机 (V4L2)"] --> B["usb_cam 驱动"]
     B -->|"image_raw\n(bgr8, 1920×1080)"| C["RectifyNode"]
@@ -955,7 +955,7 @@ flowchart TD
     style D fill:#2196f3,color:#fff
     style E fill:#ff9800,color:#fff
     style F fill:#4caf50,color:#fff
-```
+{% endmermaid %}
 
 > 全部节点在同一 `component_container` 进程中运行，图像传输零拷贝。
 
