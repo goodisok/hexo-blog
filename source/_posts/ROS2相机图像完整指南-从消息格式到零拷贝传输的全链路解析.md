@@ -69,16 +69,16 @@ uint8[] data               # 原始像素数据
 
 ### 1.3 编码选择指南
 
-```
-需要深度学习推理？
-├── 是 → rgb8（大多数模型训练用 RGB）
-└── 否 → 需要 OpenCV 处理？
-    ├── 是 → bgr8（避免额外转换）
-    └── 否 → 深度相机？
-        ├── 是 → 16UC1（毫米精度）或 32FC1（米精度）
-        └── 否 → 来自 Bayer 传感器？
-            ├── 是 → bayer_*（让 image_proc 去拜耳化）
-            └── 否 → mono8（灰度足够时减少带宽）
+```mermaid
+flowchart TD
+    A{需要深度学习推理?} -->|是| B["rgb8（大多数模型训练用 RGB）"]
+    A -->|否| C{需要 OpenCV 处理?}
+    C -->|是| D["bgr8（避免额外转换）"]
+    C -->|否| E{深度相机?}
+    E -->|是| F["16UC1（毫米）或 32FC1（米）"]
+    E -->|否| G{来自 Bayer 传感器?}
+    G -->|是| H["bayer_*（让 image_proc 去拜耳化）"]
+    G -->|否| I["mono8（灰度足够时减少带宽）"]
 ```
 
 ### 1.4 CompressedImage 消息
@@ -541,23 +541,13 @@ container = ComposableNodeContainer(
 
 对于 Bayer 编码的工业相机，典型的预处理管线是：
 
-```
-相机驱动 → image_raw (bayer_rggb8)
-               │
-         DebayerNode
-               │
-         ├── image_mono (mono8)
-         └── image_color (bgr8)
-                    │
-              RectifyNode + camera_info
-                    │
-              image_rect_color (bgr8, 已校正)
-                    │
-               ResizeNode
-                    │
-              resize/image (320×240)
-                    │
-              推理节点（YOLO 等）
+```mermaid
+flowchart TD
+    A["相机驱动"] -->|"image_raw (bayer_rggb8)"| B["DebayerNode"]
+    B -->|"image_mono (mono8)"| C1["灰度处理节点"]
+    B -->|"image_color (bgr8)"| D["RectifyNode + camera_info"]
+    D -->|"image_rect_color (bgr8, 已校正)"| E["ResizeNode"]
+    E -->|"resize/image (320×240)"| F["推理节点（YOLO 等）"]
 ```
 
 ---
@@ -770,9 +760,16 @@ ComposableNode(
 
 Isaac ROS 使用 NITROS（NVIDIA Isaac Transport for ROS）实现 GPU 内存的零拷贝传输。图像数据始终保留在 GPU 显存中，不需要 GPU↔CPU 之间的数据搬运：
 
-```
-相机 → GPU 显存 → 畸变校正(GPU) → 色彩转换(GPU) → 推理(GPU)
-                   ↑ 零拷贝传输 ↑ 零拷贝传输 ↑
+```mermaid
+flowchart LR
+    A["相机"] -->|"上传"| B["GPU 显存"]
+    B -->|"零拷贝"| C["畸变校正\n(GPU)"]
+    C -->|"零拷贝"| D["色彩转换\n(GPU)"]
+    D -->|"零拷贝"| E["推理\n(GPU)"]
+    style B fill:#76b900,color:#fff
+    style C fill:#76b900,color:#fff
+    style D fill:#76b900,color:#fff
+    style E fill:#76b900,color:#fff
 ```
 
 ### 9.3 使用 OpenCV CUDA
@@ -943,28 +940,24 @@ def generate_launch_description():
 
 ### 11.2 架构图
 
-```
-USB 相机 ─(V4L2)─► usb_cam ──► image_raw (bgr8, 1920×1080)
-                                    │
-                            camera_info (标定参数)
-                                    │
-                                    ▼
-                              RectifyNode
-                                    │
-                              image_rect (bgr8, 1920×1080, 已校正)
-                                    │
-                                    ▼
-                              ResizeNode
-                                    │
-                              image (bgr8, 640×480)
-                                    │
-                                    ▼
-                              YoloNode
-                                    │
-                              detections (检测结果)
+```mermaid
+flowchart TD
+    A["USB 相机 (V4L2)"] --> B["usb_cam 驱动"]
+    B -->|"image_raw\n(bgr8, 1920×1080)"| C["RectifyNode"]
+    B -->|"camera_info\n(标定参数)"| C
+    C -->|"image_rect\n(bgr8, 1920×1080, 已校正)"| D["ResizeNode"]
+    D -->|"image\n(bgr8, 640×480)"| E["YoloNode"]
+    E -->|"detections"| F["检测结果"]
 
-              ★ 全部在同一进程中运行，图像传输零拷贝 ★
+    style A fill:#607d8b,color:#fff
+    style B fill:#2196f3,color:#fff
+    style C fill:#2196f3,color:#fff
+    style D fill:#2196f3,color:#fff
+    style E fill:#ff9800,color:#fff
+    style F fill:#4caf50,color:#fff
 ```
+
+> 全部节点在同一 `component_container` 进程中运行，图像传输零拷贝。
 
 ---
 
