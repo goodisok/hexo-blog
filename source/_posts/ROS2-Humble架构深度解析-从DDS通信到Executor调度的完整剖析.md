@@ -21,6 +21,9 @@ tags:
   - 零拷贝
   - 回调组
   - 实时系统
+  - MCAP
+  - rosbag2
+  - Foxglove
   - 机器人操作系统
 mathjax: true
 ---
@@ -919,9 +922,185 @@ source install/setup.bash
 
 ---
 
-## 十、ROS2 CLI 工具速查
+## 十、Bag 数据记录：从 SQLite3 到 MCAP
 
-### 10.1 核心命令
+### 10.1 ROS2 Bag 存储格式演进
+
+ROS2 的 `ros2 bag` 工具用于记录和回放话题数据，是调试、数据分析和离线算法开发的核心工具。其存储格式经历了重要演进：
+
+| 版本 | 默认格式 | 特点 |
+|------|---------|------|
+| ROS1 | `.bag`（自定义二进制） | 单文件、不支持索引重建 |
+| ROS2 Foxy/Galactic | **SQLite3**（`.db3`） | 结构化查询，但大文件性能差 |
+| ROS2 Humble+ | **SQLite3**（默认），**MCAP** 可选 | Humble 中 MCAP 作为可选插件 |
+| ROS2 Iron/Jazzy+ | **MCAP**（默认） | 高性能、流式读写、自描述 |
+
+### 10.2 什么是 MCAP
+
+MCAP（读作 "em-cap"）是由 Foxglove 开发的开源数据容器格式，专为机器人和自动驾驶设计。其核心优势：
+
+| 特性 | SQLite3 (.db3) | MCAP (.mcap) |
+|------|----------------|--------------|
+| **写入性能** | 中等（事务开销） | 极高（追加写入，无事务） |
+| **读取性能** | 依赖索引，大文件慢 | 内置 Chunk 索引，O(1) 时间定位 |
+| **文件损坏恢复** | 困难（SQLite WAL 损坏后难恢复） | 可恢复（Chunk 独立，损坏只影响局部） |
+| **流式写入** | 不支持 | 支持（可边写边读） |
+| **压缩** | 不支持 | 内置（LZ4/Zstd，按 Chunk 压缩） |
+| **自描述** | 消息定义存在 schema 表中 | 完整 schema 嵌入文件（无需额外 `.msg` 文件） |
+| **跨平台工具** | 需要 ROS2 环境才能读 | Foxglove Studio 直接打开、Python/C++/Go/Rust SDK |
+| **文件大小** | 较大 | 压缩后通常减小 30-60% |
+
+### 10.3 在 Humble 中使用 MCAP
+
+Humble 中 MCAP 存储插件需要手动安装：
+
+```bash
+# 安装 MCAP 存储插件
+sudo apt install ros-humble-rosbag2-storage-mcap
+```
+
+#### 录制为 MCAP 格式
+
+```bash
+# 指定存储格式为 mcap
+ros2 bag record -a -s mcap
+
+# 录制指定主题，使用 mcap 格式 + Zstd 压缩
+ros2 bag record /imu /camera/image /cmd_vel \
+    -s mcap \
+    --compression-mode message \
+    --compression-format zstd
+
+# 指定输出目录和最大文件大小（自动分片）
+ros2 bag record -a -s mcap \
+    -o /data/flight_test_001 \
+    --max-bag-size 1073741824  # 1GB 自动分片
+
+# 录制时添加元数据
+ros2 bag record -a -s mcap \
+    -o /data/flight_test_001 \
+    --custom-data "drone_id=3" \
+    --custom-data "pilot=zhang"
+```
+
+#### 回放
+
+```bash
+# 回放 mcap 格式的 bag
+ros2 bag play /data/flight_test_001
+
+# 倍速回放
+ros2 bag play /data/flight_test_001 --rate 2.0
+
+# 从指定时间开始回放
+ros2 bag play /data/flight_test_001 --start-offset 30
+
+# 只回放特定主题
+ros2 bag play /data/flight_test_001 --topics /imu /cmd_vel
+
+# 循环回放
+ros2 bag play /data/flight_test_001 --loop
+```
+
+#### 查看 Bag 信息
+
+```bash
+ros2 bag info /data/flight_test_001
+
+# 典型输出：
+# Files:             flight_test_001_0.mcap
+# Bag size:          256.3 MiB
+# Storage id:        mcap
+# Duration:          120.5s
+# Start:             Apr 22 2026 10:30:00.000
+# End:               Apr 22 2026 10:32:00.500
+# Messages:          4820000
+# Topic information:
+#   /imu              400000 msgs  : sensor_msgs/msg/Imu
+#   /camera/image      3600 msgs  : sensor_msgs/msg/Image
+#   /cmd_vel          12000 msgs  : geometry_msgs/msg/Twist
+```
+
+### 10.4 MCAP 文件结构
+
+```
+┌─────────────────────────────────────┐
+│            Magic Bytes              │  ← 文件标识 0x89 M C A P 0x30 \r \n
+├─────────────────────────────────────┤
+│          Header Record              │  ← 文件级元数据
+├─────────────────────────────────────┤
+│      Schema Record (IMU)            │  ← 消息定义（自描述）
+│      Schema Record (Image)          │
+│      Channel Record (/imu)          │  ← 话题 → Schema 映射
+│      Channel Record (/camera)       │
+├─────────────────────────────────────┤
+│  ┌───────────────────────────────┐  │
+│  │   Chunk (LZ4/Zstd 压缩)      │  │  ← 一段时间内的消息集合
+│  │   ├── Message Record          │  │
+│  │   ├── Message Record          │  │
+│  │   └── Message Record          │  │
+│  └───────────────────────────────┘  │
+│  Chunk Index → 指向上面的 Chunk     │  ← 快速定位
+├─────────────────────────────────────┤
+│  ┌───────────────────────────────┐  │
+│  │   Chunk (下一时间段)           │  │
+│  │   └── ...                     │  │
+│  └───────────────────────────────┘  │
+│  Chunk Index                        │
+├─────────────────────────────────────┤
+│      Statistics Record              │  ← 全局统计信息
+│      Summary Section                │  ← 所有 Chunk Index 的汇总
+│      Footer                         │
+└─────────────────────────────────────┘
+```
+
+关键设计：
+- **Chunk**：消息按时间段分组压缩，单个 Chunk 损坏不影响其他数据
+- **Chunk Index**：紧跟每个 Chunk 后面，包含时间范围和偏移量，支持 O(1) 时间定位
+- **Schema 嵌入**：消息的完整定义（`.msg` 文件内容）直接存储在文件中——拿到 `.mcap` 文件就能解析，无需安装对应的 ROS 包
+
+### 10.5 用 Python 直接读取 MCAP
+
+MCAP 的一个重要优势是不依赖 ROS2 环境即可读取——用纯 Python 就能解析：
+
+```python
+# pip install mcap mcap-ros2-support
+from mcap_ros2.reader import read_ros2_messages
+
+for msg in read_ros2_messages("/data/flight_test_001/flight_test_001_0.mcap"):
+    if msg.channel.topic == "/imu":
+        imu = msg.ros_msg
+        print(f"t={msg.log_time_ns/1e9:.3f} "
+              f"acc=({imu.linear_acceleration.x:.2f}, "
+              f"{imu.linear_acceleration.y:.2f}, "
+              f"{imu.linear_acceleration.z:.2f})")
+```
+
+也可以用 **Foxglove Studio**（开源桌面应用）直接打开 `.mcap` 文件进行可视化分析——支持时间序列图、3D 视图、图像回放等，无需启动 ROS2 环境。
+
+### 10.6 SQLite3 → MCAP 转换
+
+```bash
+# 将已有的 db3 格式 bag 转换为 mcap
+ros2 bag convert -i /old_bag -o /new_bag \
+    --output-options "{uri: /new_bag, storage_id: mcap}"
+```
+
+### 10.7 选择建议
+
+| 场景 | 推荐格式 |
+|------|---------|
+| Humble 日常开发/调试 | MCAP（安装插件后默认使用） |
+| 需要 SQL 查询 bag 内容 | SQLite3 |
+| 长时间飞行记录（>1GB） | MCAP（压缩 + 分片 + 损坏恢复） |
+| 跨团队共享数据 | MCAP（自描述，无需 ROS 环境即可打开） |
+| 与 Foxglove Studio 集成 | MCAP（原生支持） |
+
+---
+
+## 十一、ROS2 CLI 工具速查
+
+### 11.1 核心命令
 
 ```bash
 # ===== 节点 =====
@@ -970,15 +1149,9 @@ ros2 doctor                       # 系统健康检查
 ros2 wtf                          # 同上（别名）
 ```
 
-### 10.2 调试技巧
+### 11.2 调试技巧
 
 ```bash
-# 记录所有主题到 bag 文件
-ros2 bag record -a
-
-# 回放 bag 文件
-ros2 bag play my_bag/
-
 # 查看计算图（需要 rqt_graph）
 ros2 run rqt_graph rqt_graph
 
@@ -993,11 +1166,11 @@ ros2 service call /drone_controller/set_logger_level \
 
 ---
 
-## 十一、安全机制：SROS2
+## 十二、安全机制：SROS2
 
 ROS1 没有任何安全机制——任何人都可以连接到 rosmaster 并发布控制指令。ROS2 通过 SROS2 提供了完整的安全框架。
 
-### 11.1 安全架构
+### 12.1 安全架构
 
 SROS2 基于 DDS-Security 标准，提供三层保护：
 
@@ -1007,7 +1180,7 @@ SROS2 基于 DDS-Security 标准，提供三层保护：
 | **加密** | 保护通信内容 | AES-GCM-256 |
 | **访问控制** | 限制节点权限 | 权限 XML 文件 |
 
-### 11.2 快速启用
+### 12.2 快速启用
 
 ```bash
 # 创建安全密钥库
@@ -1028,9 +1201,9 @@ ros2 run drone_controller controller_node \
 
 ---
 
-## 十二、性能优化实践
+## 十三、性能优化实践
 
-### 12.1 DDS 调优
+### 13.1 DDS 调优
 
 ```bash
 # 使用 Cyclone DDS（本地低延迟）
@@ -1043,7 +1216,7 @@ export ROS_LOCALHOST_ONLY=1
 export ROS_DOMAIN_ID=42
 ```
 
-### 12.2 减少序列化开销
+### 13.2 减少序列化开销
 
 ```cpp
 // 使用 TypeAdapted 消息避免不必要的类型转换
@@ -1054,7 +1227,7 @@ RCLCPP_COMPONENTS_REGISTER_NODE(my_node)
 // 在 Fast DDS XML Profile 中配置 SHM Transport
 ```
 
-### 12.3 Executor 选择指南
+### 13.3 Executor 选择指南
 
 | 场景 | 推荐 Executor | 原因 |
 |------|--------------|------|
@@ -1066,9 +1239,9 @@ RCLCPP_COMPONENTS_REGISTER_NODE(my_node)
 
 ---
 
-## 十三、总结与展望
+## 十四、总结与展望
 
-### 13.1 ROS2 Humble 的核心价值
+### 14.1 ROS2 Humble 的核心价值
 
 1. **DDS 标准化通信**：去中心化、QoS 可配、安全加密，满足生产环境需求
 2. **灵活的执行模型**：Executor + Callback Group 提供可控的并发策略
@@ -1076,7 +1249,7 @@ RCLCPP_COMPONENTS_REGISTER_NODE(my_node)
 4. **统一的组件化**：同一份代码既能独立运行也能进程内零拷贝共享
 5. **声明式部署**：Launch 系统支持 Python/XML/YAML，参数化和条件启动
 
-### 13.2 未来演进
+### 14.2 未来演进
 
 - **Jazzy Jalisco（2024 LTS，支持至 2029）**：改进的类型适配、更好的 ROS 1 桥接
 - **Kilted（2025 滚动发布）**：EventsExecutor 进入稳定版，更低的调度延迟
@@ -1085,7 +1258,7 @@ RCLCPP_COMPONENTS_REGISTER_NODE(my_node)
 
 ---
 
-## 十四、参考资源
+## 十五、参考资源
 
 1. **ROS2 Humble 官方文档**: [docs.ros.org/en/humble](https://docs.ros.org/en/humble/)
 2. **ROS2 设计文档**: [design.ros2.org](https://design.ros2.org/)
@@ -1099,3 +1272,7 @@ RCLCPP_COMPONENTS_REGISTER_NODE(my_node)
 10. **rclcpp 源码**: [github.com/ros2/rclcpp](https://github.com/ros2/rclcpp)
 11. **Casini et al. ECRTS 2019**: Response-Time Analysis of ROS 2 Processing Chains Under Reservation-Based Scheduling
 12. **ROS2 安全 (SROS2)**: [docs.ros.org/en/humble/Concepts/Intermediate/About-Security.html](https://docs.ros.org/en/humble/Concepts/Intermediate/About-Security.html)
+13. **MCAP 格式规范**: [mcap.dev](https://mcap.dev/)
+14. **rosbag2 存储插件**: [github.com/ros2/rosbag2](https://github.com/ros2/rosbag2)
+15. **Foxglove Studio**: [foxglove.dev](https://foxglove.dev/)
+16. **mcap Python 库**: [github.com/foxglove/mcap](https://github.com/foxglove/mcap)
