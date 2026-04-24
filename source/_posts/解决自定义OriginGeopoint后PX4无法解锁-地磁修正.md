@@ -1,6 +1,6 @@
 ---
 title: 解决自定义 OriginGeopoint 后 PX4 无法解锁：地磁与 getMagField 修正
-date: 2026-03-14 21:00:00
+date: 2026-02-09 14:30:00
 categories:
   - 开发
 tags:
