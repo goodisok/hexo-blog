@@ -676,8 +676,88 @@ x500_hp 验证了 50 m/s 下的方法有效性，但对于类似 [Anduril Bolt /
 
 **工程建议**：
 1. **50 m/s 以下**：Gazebo + velocity_decay 可用，结合 setpoint replay 做参数校准，本文方法完全适用
-2. **50-97 m/s**：**必须**替换阻力模型 —— 使用 Gazebo 的 `LiftDrag` 插件或自定义气动力插件实现 F = ½ρCdAv²
-3. 如果项目对高速气动精度要求极高，应考虑 JSBSim 等专业 FDM 框架
+2. **50-97 m/s**：**必须**替换阻力模型 —— 使用本文提供的 `QuadraticDrag` 自定义插件实现 F = ½ρCdAv²（见 §10.9）
+3. 如果项目对高速气动精度要求极高（含前进比、侧风等），可进一步考虑 JSBSim 等专业 FDM 框架
+
+### 10.9 解决方案：QuadraticDrag 自定义 Gazebo 插件
+
+Gazebo 内置的 `LiftDrag` 插件是为**机翼翼型**设计的——它基于攻角-升力/阻力曲线，不适合四旋翼钝体的**全向体阻力**。因此我们开发了一个极简的 C++ 系统插件 `QuadraticDrag`，直接在每个物理步中对 `base_link` 施加：
+
+**F_drag = −½ρ · CdA · |v| · v**
+
+其中 v 是世界系线速度，方向始终与运动方向相反。
+
+**SDF 配置**（在 `model.sdf` 的 `<model>` 内添加）：
+
+```xml
+<plugin filename="QuadraticDrag" name="quadratic_drag::QuadraticDrag">
+  <link_name>base_link</link_name>
+  <CdA>0.020</CdA>           <!-- 阻力系数 × 迎风面积，m² -->
+  <air_density>1.225</air_density>  <!-- 海平面标准大气 -->
+</plugin>
+```
+
+**构建与运行**：
+
+```bash
+# 构建插件
+cd plugins/quadratic_drag && mkdir -p build && cd build
+cmake .. && make -j$(nproc)
+
+# 启动仿真前设置插件搜索路径
+export GZ_SIM_SYSTEM_PLUGIN_PATH="/path/to/gazebo-px4-sim/plugins/quadratic_drag/build"
+
+# 用辅助脚本一键启动
+bash scripts/run_gobi_v2_sitl.sh
+```
+
+> **关键**：使用 `QuadraticDrag` 时**不要**同时保留 `velocity_decay`，否则会重复计阻。`gobi_v2_base` 已去掉 `velocity_decay`。
+
+插件源码约 100 行 C++，见仓库 `plugins/quadratic_drag/QuadraticDrag.cc`。核心逻辑是在 `PreUpdate` 中获取 link 世界系速度、计算 ½ρCdA|v|v、调用 `link.AddWorldForce()`。
+
+### 10.10 Gobi v1（线性）vs v2（v² 阻力）同任务实测对比
+
+使用**完全相同的多速度段飞行脚本**（5→10→15→25→40→50→70→85→97 m/s），对比两个 Gobi 模型在同一控制指令下的动力学响应：
+
+| 指标 | Gobi v1 (velocity_decay) | Gobi v2 (QuadraticDrag CdA=0.02) |
+|------|--------------------------|----------------------------------|
+| 最高水平速度 | **90.6 m/s** | **76.4 m/s** |
+| 速度差 | — | **−14.2 m/s (−15.7%)** |
+| 阻力模型 | F = 0.3v（线性） | F = ½ρ·0.02·v²（二次） |
+| 97 m/s 理论阻力 | 29.1 N | **115.3 N** |
+
+![Gobi v1 vs v2 水平速度对比：相同 T/W=10、相同任务脚本，v2（v² 阻力）最高速显著低于 v1，更接近真实物理行为。](/images/drone-dynamics/gobi/gobi_v1_vs_v2_speed.png)
+
+**v2 最高速 76.4 m/s 的物理含义**：在 CdA=0.02、最大倾角 85° 下，电机提供的水平推力分量（约 215 × sin85° ≈ 214 N）在 76 m/s 时被阻力（½ × 1.225 × 0.02 × 76² ≈ 70.8 N）加上维持高度所需的垂直推力共同消耗殆尽，达到了推力-阻力平衡。这比 v1 的"几乎无阻力飞到 90 m/s"合理得多。
+
+![Gobi v2 速度剖面：高速段的加速时间明显变长，减速制动更快——与真实高速无人机的飞行特征一致。](/images/drone-dynamics/gobi/gobi_v2_speed_profile.png)
+
+### 10.11 未建模效应：桨盘前进比
+
+即使用了 v² 阻力，Gazebo 的 `MulticopterMotorModel` 仍然假设 **F = k_f · ω²**（静推力公式）。在高前飞速度下，这个假设会失效：
+
+**桨盘前进比 J = V∞ / (n·D)**
+
+其中 V∞ 是前飞速度，n 是转速（rev/s），D 是桨盘直径。当 J 升高时，桨叶的有效攻角改变，等效推力系数 η(J) 随之下降。
+
+以 Gobi 参数估算（桨径 ~0.33 m，最大转速 ~1200/(2π) ≈ 191 rev/s）：
+
+| 前飞速度 | J = V/(n·D) | 推力衰减（典型） |
+|---------|-------------|---------------|
+| 10 m/s | 0.16 | <5%，可忽略 |
+| 50 m/s | 0.79 | ~10-15% |
+| 70 m/s | 1.11 | ~20-30% |
+| 97 m/s | 1.54 | **~35-50%** |
+
+这意味着在 70+ m/s 时，仿真中的电机产生的推力可能比真实值高 20-50%。这是 **Gazebo 电机模型的第二层结构误差**（第一层是阻力模型，§10.9 已解决）。
+
+**工程对策**：
+
+1. **分速度段等效 k_f**（最简单）：在 §10.7 的辨识结果中，不同速度段已经给出了等效 k_f，可以直接用作对应速度段的仿真参数
+2. **扩展电机插件**（最准确）：修改 `MulticopterMotorModel` 的推力公式为 F = k_f·ω²·η(J)，η(J) 通过推力台在风洞中实测的数据查表
+3. **后处理修正**（最方便）：保持仿真不变，在数据分析阶段对推力和速度做 J 修正
+
+> 本文选择的是**分速度段等效 k_f** + **v² 阻力插件**的组合，在不修改 Gazebo 内核的前提下，覆盖了高速截击机建模的两个最关键缺陷。对于要求更高精度的项目，推荐方案 2。
 
 ---
 
@@ -754,15 +834,16 @@ x500_hp 验证了 50 m/s 下的方法有效性，但对于类似 [Anduril Bolt /
 | x500 | 孪生实验的"真值端" | 0-12 m/s | 提供参数已知的基准飞行数据 |
 | interceptor | 孪生实验的"待校准端" | 0-12 m/s | 验证参数偏差→辨识→修正的闭环流程 |
 | x500_hp | 高速验证平台 | 0-50 m/s | 验证方法论在中高速域仍然有效 |
-| **gobi** | **极高速测试平台** | **0-97 m/s** | **揭示 Gazebo 线性阻力在 50+ m/s 的结构性失效** |
+| gobi (v1) | 极高速测试 — 线性阻力 | 0-97 m/s | 揭示 Gazebo 线性阻力在 50+ m/s 的结构性失效 |
+| **gobi_v2** | **极高速测试 — v² 阻力** | **0-97 m/s** | **使用 QuadraticDrag 插件修复阻力模型后的高速仿真平台** |
 
-这四个模型存在的意义是**验证方法论本身**——证明 setpoint replay + k_f 辨识 + 迭代修正这套流程能工作，同时明确它的能力边界。它们不替代任何一架真实飞机。
+这五个模型存在的意义是**验证方法论本身**——证明 setpoint replay + k_f 辨识 + 迭代修正这套流程能工作，同时明确它的能力边界（v1 → v2 的演进也验证了阻力模型升级的效果）。它们不替代任何一架真实飞机。
 
 ### 12.2 PX4 生态中没有高速多旋翼模型
 
 截至 PX4 v1.16，官方 Gazebo 仓库的全部多旋翼仅有 x500 一个基础型号（所有 x500_depth、x500_lidar 等变体动力学参数完全相同）。社区曾明确提出 racer/高速模型需求（[PX4-SITL_gazebo #729](https://github.com/PX4/PX4-SITL_gazebo/issues/729)），官方回复"No there is no racer model"，至今未解决。VTOL 模型（standard_vtol、quadtailsitter）虽然能高速飞行，但靠的是固定翼升力模式，与纯多旋翼截击机的飞行原理完全不同。
 
-本文创建的 x500_hp（T/W≈8、50 m/s）和 gobi（T/W≈10、97 m/s）实际上是 **PX4+Gazebo 生态中仅有的两个高速纯多旋翼仿真模型**。
+本文创建的 x500_hp（T/W≈8、50 m/s）、gobi / gobi_v2（T/W≈10、97 m/s，v2 带 v² 阻力插件）实际上是 **PX4+Gazebo 生态中仅有的高速纯多旋翼仿真模型**。
 
 ### 12.3 x500_hp 与真实截击机的差距
 
@@ -825,13 +906,14 @@ x500_hp 的 model.sdf（模板）
 4. Setpoint replay 到仿真模型，评估 RMSE / R²
 5. 如果 R² < 0.9 → 迭代修正参数 → 回到步骤 4
 
-### Phase 4：扩展速度包线（15-50+ m/s）
+### Phase 4：扩展速度包线（15-97 m/s）
 
 1. 逐步提高飞行速度（15 → 25 → 35 → 50 → 70 → 97 m/s）
 2. 每个速度段独立辨识 k_f，观察是否随速度漂移
 3. 如果漂移 > 10%：阻力模型结构不足 → 改为非线性阻力
-4. **关键：50 m/s 以上必须替换 Gazebo 默认的 velocity_decay 为 LiftDrag 插件或自定义 v² 阻力**（本文 Gobi 实验已证明线性阻力模型在此速度以上完全失效）
+4. ✅ **已完成**：50 m/s 以上替换 velocity_decay → `QuadraticDrag` 自定义插件（§10.9），gobi_v2 模型验证了 v² 阻力的正确性（§10.10）
 5. Setpoint replay 验证各速度段的匹配度
+6. （可选进阶）扩展电机模型以包含前进比效应 η(J)（§10.11）
 
 ### Phase 5：算法部署
 
@@ -867,6 +949,10 @@ gazebo-px4-sim/
 ├── px4_custom/                         # PX4 中新增的自定义文件
 │   ├── models/interceptor/             # interceptor SDF 模型
 │   └── airframes/4050_gz_interceptor
+├── plugins/quadratic_drag/             # ★ v² 阻力自定义 Gazebo 插件
+│   ├── QuadraticDrag.cc               #   ~100 行 C++，核心逻辑
+│   ├── CMakeLists.txt                 #   构建配置（依赖 gz-sim8）
+│   └── README.md                      #   使用说明
 ├── scripts/
 │   ├── fly_mission.py                  # x500 真值数据采集
 │   ├── setpoint_replay.py             # ★ 设定点回放（核心实验脚本）
@@ -878,10 +964,13 @@ gazebo-px4-sim/
 │   ├── run_setpoint_replay_all_rounds.sh  # 4 轮自动化脚本
 │   ├── openloop_replay.py            # 开环回放（实验证伪用）
 │   ├── create_hp_model.py            # 创建高性能 x500_hp 模型
-│   ├── create_gobi_model.py          # ★ 创建 Gobi 截击机模型（T/W≈10, 97 m/s）
+│   ├── create_gobi_model.py          # 创建 Gobi v1 模型（线性阻力）
+│   ├── create_gobi_v2_model.py       # ★ 创建 Gobi v2 模型（QuadraticDrag 插件）
 │   ├── fly_multispeed.py             # 多速度段飞行测试（0-50 m/s）
-│   ├── fly_gobi_multispeed.py        # ★ Gobi 多速度段飞行（0-97 m/s）
-│   ├── gobi_analysis.py              # ★ Gobi 高速分析（k_f + 阻力辨识）
+│   ├── fly_gobi_multispeed.py        # Gobi 多速度段飞行（0-97 m/s）
+│   ├── gobi_analysis.py              # Gobi 高速分析（k_f + 阻力辨识）
+│   ├── compare_gobi_v1_v2.py         # ★ v1 vs v2 阻力模型对比
+│   ├── run_gobi_v2_sitl.sh           # ★ 一键启动 gobi_v2 SITL（含插件路径）
 │   ├── fly_sysid_maneuver.py         # 系统辨识激励机动
 │   ├── imu_sysid.py                  # IMU-based k_f 辨识
 │   ├── analyze_sysid_results.py      # 高速飞行分析
@@ -902,10 +991,15 @@ gazebo-px4-sim/
 │   │   ├── replay_aligned/           #   对齐后 replay 对比
 │   │   └── setpoint_replay_*/        #   高速 replay 结果
 │   ├── gobi/                          # ★ Gobi 截击机实验结果（0-97 m/s）
-│   │   ├── gobi_speed_profile.png    #   全速域飞行剖面
-│   │   ├── gobi_kf_vs_speed.png      #   k_f 辨识 vs 速度
-│   │   ├── gobi_drag_analysis.png    #   线性/二次阻力对比
-│   │   └── gobi_cda_vs_speed.png     #   表观 CdA 分析
+│   │   ├── gobi_speed_profile.png    #   v1 全速域飞行剖面
+│   │   ├── gobi_kf_vs_speed.png      #   v1 k_f 辨识 vs 速度
+│   │   ├── gobi_drag_analysis.png    #   v1 线性/二次阻力对比
+│   │   ├── gobi_cda_vs_speed.png     #   v1 表观 CdA 分析
+│   │   ├── gobi_v2_speed_profile.png #   v2 全速域飞行剖面
+│   │   ├── gobi_v2_kf_vs_speed.png   #   v2 k_f 辨识 vs 速度
+│   │   ├── gobi_v2_drag_analysis.png #   v2 阻力分析
+│   │   ├── gobi_v2_cda_vs_speed.png  #   v2 CdA 分析
+│   │   └── gobi_v1_vs_v2_speed.png   #   ★ v1 vs v2 速度对比
 │   ├── sysid_analysis/               # 系统辨识结果
 │   ├── sp_experiments.json
 │   └── x500_truth_csv/
@@ -945,15 +1039,27 @@ python3 scripts/create_hp_model.py
 python3 scripts/run_full_experiment.py
 python3 scripts/comprehensive_analysis.py
 
-# 7. Gobi 截击机 97 m/s 实验
+# 7. Gobi v1（线性阻力）97 m/s 实验
 python3 scripts/create_gobi_model.py
-# 重新构建 PX4
 cd PX4-Autopilot && make px4_sitl gz_x500
-# 启动 Gobi 模型
 PX4_SYS_AUTOSTART=4098 PX4_GZ_MODEL=gobi HEADLESS=1 \
   build/px4_sitl_default/bin/px4 build/px4_sitl_default/etc
 # 另一个终端：
 python3 scripts/fly_gobi_multispeed.py
-# 分析结果
 python3 scripts/gobi_analysis.py
+
+# 8. 构建 QuadraticDrag 插件 + Gobi v2（v² 阻力）实验
+cd plugins/quadratic_drag && mkdir -p build && cd build
+cmake .. && make -j$(nproc)
+cd ../../..
+python3 scripts/create_gobi_v2_model.py
+cd PX4-Autopilot && make px4_sitl gz_x500 && cd ..
+# 用辅助脚本启动（自动设置插件路径）
+bash scripts/run_gobi_v2_sitl.sh
+# 另一个终端：
+python3 scripts/fly_gobi_multispeed.py
+python3 scripts/gobi_analysis.py results/gobi/gobi_v2_multispeed.ulg results/gobi gobi_v2
+
+# 9. 对比 v1 vs v2 阻力效果
+python3 scripts/compare_gobi_v1_v2.py
 ```
