@@ -1,5 +1,5 @@
 ---
-title: 无人机动力学仿真验证实战：从 Gazebo 参数偏差到 4 轮迭代收敛
+title: 四旋翼 Sim-to-Real 动力学验证全流程：Gazebo+PX4 从参数辨识到 50 m/s 高速验证
 date: 2026-04-24 00:00:00
 categories:
   - 无人机
@@ -19,11 +19,12 @@ tags:
   - 仿真验证
   - 模型校准
   - 设定点回放
+  - 高速截击机
 ---
 
 > 核心问题：我手里有一个四旋翼动力学模型，参数是猜的，怎么验证它离"真实飞机"有多远？
 >
-> 本文用一个**纯仿真闭环实验**完整走通了 Sim-to-Real 动力学验证流程。实验方法是**设定点回放（Setpoint Replay）**——从"真值"飞机的 ULG 日志中提取 trajectory_setpoint，回放给"待校准"的仿真模型，比较两者在相同目标下的动力学响应差异。4 轮迭代参数修正后，垂直速度 RMSE 下降 48%，俯仰角 RMSE 下降 45%，偏航角速度 RMSE 下降 42%。
+> 本文用一个**纯仿真闭环实验**完整走通了 Sim-to-Real 动力学验证流程。实验方法是**设定点回放（Setpoint Replay）**——从"真值"飞机的 ULG 日志中提取 trajectory_setpoint，回放给"待校准"的仿真模型，比较两者在相同目标下的动力学响应差异。4 轮迭代参数修正后，垂直速度 RMSE 下降 48%，俯仰角 RMSE 下降 45%，偏航角速度 RMSE 下降 42%。进一步在 50 m/s 高速场景下验证了方法的适用性，并给出了从方法验证到外场截击机建模的完整路线图。
 >
 > 这套方法的核心价值在于：**它和实机验证的工作流完全一致**。外场飞完拿到 ULG → 提取设定点 → 回放到仿真 → 对比响应 → 修正参数。在买飞机之前，用纯仿真把整条流水线跑通。
 
@@ -174,7 +175,7 @@ param set-default CA_ROTOR0_KM 0.05
 2. **启动 PX4+Gazebo interceptor**，等待 GPS 就绪
 3. **先用 `action.takeoff()` 起飞到稳定高度**——直接从地面 offboard 起飞大概率被 PX4 failsafe 拒绝
 4. **切换到 offboard 模式**，按 ULG 时间戳逐条回放设定点
-5. **回放完毕后着陆、解锁**，PX4 自动保存 ULG
+5. **回放完毕后着陆、上锁（disarm）**，PX4 自动保存 ULG
 
 核心回放逻辑：
 
@@ -510,40 +511,29 @@ ULG 日志中记录了 PX4 控制链路各层的数据：
 
 ---
 
-## 9. 推荐的实机验证流程
-
-拿到实机后，参数辨识的优先级按灵敏度排序：
-
-1. **推力台测试 → 修正 motorConstant**。本实验证明推力系数是最敏感的参数（贡献 ~39% 的 RMSE 下降）。单电机上推力台，记录油门-推力曲线，拟合 `F = k_f × ω²` 中的 k_f。
-2. **称重 → 修正 mass**。最简单、影响第二大（贡献 ~15% 的 Vz RMSE 下降）。
-3. **飞行测试 + 设定点回放验证**。让实机飞一套标准机动，从 ULG 提取 trajectory_setpoint，回放到仿真，算 RMSE。
-4. **如需精确验证惯性矩**——降低比较层级。设定点回放无法观测 Ixx/Iyy 差异（被控制器遮蔽），需要用**姿态设定点回放**（从 ULG 提取 `vehicle_attitude_setpoint`）或摆振测试直接测量。
-
----
-
-## 10. 仿真到外场：制导算法能直接移植吗？
+## 9. 仿真到外场：制导算法能直接移植吗？
 
 读者可能会问：在这个仿真环境中开发的截击/制导算法，调好参数后能不能直接部署到实机？
 
 **简短回答：算法逻辑可以移植，但不能直接信任仿真中的性能指标。**
 
-### 10.1 可以移植的部分
+### 9.1 可以移植的部分
 
 如果你的制导算法工作在**设定点层级**（输出位置/速度目标，通过 MAVSDK offboard 接口下发），那么算法代码可以不做修改地在实机上运行——因为 PX4 在 SITL 和实机硬件上跑的是同一份飞控代码，MAVSDK 接口完全一致。
 
-### 10.2 仿真没有覆盖的关键差距
+### 9.2 仿真没有覆盖的关键差距
 
 | 维度 | 本文仿真验证的范围 | 实际截击场景的需求 | 差距 |
 |------|------------------|------------------|------|
-| 速度 | 0-3 m/s（低速悬停/平飞） | 10-30+ m/s | 高速气动力、螺旋桨入流效应未建模 |
-| 姿态角 | ±15° | ±45° 以上 | 大迎角非线性效应未覆盖 |
+| 速度 | 0-50 m/s（低速迭代实验 + 高速验证） | 30-80 m/s | 高速段模型结构误差增大（见第 11 章分析） |
+| 姿态角 | ±15°（低速）/ ±75°（高速） | ±45° 以上 | 大迎角非线性效应部分覆盖 |
 | 传感器 | Gazebo 理想 IMU/GPS | 相机噪声、GPS 拒止、目标检测延迟 | 传感器模型完全缺失 |
 | 环境扰动 | 无风 | 阵风、湍流 | 风场模型未添加 |
 | 执行器 | 线性推力模型 `F = k_f × ω²` | 电机饱和、ESC 非线性、电池电压跌落 | 执行器边界行为未验证 |
 
 特别值得警惕的是我们实验中的一个发现：**PX4 控制器在低速域有极强的鲁棒性**（Round 3→4 惯性矩偏差 15% 完全被遮蔽）。这意味着低速仿真中"看起来没问题"的参数偏差，在高速高机动时控制裕度缩小后可能突然暴露，导致失控。
 
-### 10.3 推荐的移植路径
+### 9.3 推荐的移植路径
 
 ```
 仿真开发（本文） → 扩展仿真包线 → HIL 验证 → 低速实飞 → 逐步扩包线
@@ -556,76 +546,11 @@ ULG 日志中记录了 PX4 控制链路各层的数据：
 
 ---
 
-## 11. 代码仓库与复现
-
-仓库地址：[github.com/goodisok/gazebo-px4-sim](https://github.com/goodisok/gazebo-px4-sim)
-
-```
-gazebo-px4-sim/
-├── PX4-Autopilot/                      # PX4 v1.16.1（.gitignore）
-├── px4_custom/                         # PX4 中新增的自定义文件
-│   ├── models/interceptor/             # interceptor SDF 模型
-│   └── airframes/4050_gz_interceptor
-├── scripts/
-│   ├── fly_mission.py                  # x500 真值数据采集
-│   ├── setpoint_replay.py             # ★ 设定点回放（核心实验脚本）
-│   ├── extract_ulg.py                 # ULG → CSV
-│   ├── compare.py                     # 时间对齐 + RMSE/R² + 对比图
-│   ├── sensitivity.py                 # 多轮收敛分析
-│   ├── sp_convergence_analysis.py     # 4 维收敛图生成
-│   ├── update_interceptor_params.py   # 命令行修改 SDF 参数
-│   ├── run_setpoint_replay_all_rounds.sh  # 4 轮自动化脚本
-│   └── openloop_replay.py            # 开环回放（实验证伪用）
-├── worlds/
-│   └── openloop.sdf                   # 独立 Gazebo world（无 PX4）
-├── data/flight_logs/                   # ULG 日志（.gitignore）
-├── results/
-│   ├── sp_round1/ ~ sp_round4/        # ★ 4 轮设定点回放结果
-│   ├── sp_experiments.json            # 实验配置
-│   ├── sp_convergence_full.png        # 4 维收敛图
-│   ├── x500_truth_csv/               # 真值数据 CSV
-│   ├── openloop_round4/              # 开环回放结果（证伪）
-│   ├── convergence.png
-│   └── sensitivity_table.txt
-└── README.md
-```
-
-### 复现步骤
-
-```bash
-# 1. 采集 x500 真值数据
-cd PX4-Autopilot
-HEADLESS=1 make px4_sitl gz_x500
-# 另一个终端：
-python3 scripts/fly_mission.py
-
-# 2. 设定点回放（自动化 4 轮）
-bash scripts/run_setpoint_replay_all_rounds.sh
-
-# 3. 或手动单轮：修改参数 → 启动仿真 → 回放
-python3 scripts/update_interceptor_params.py --mass 2.3 --motorConstant 7.01e-06
-cd PX4-Autopilot && HEADLESS=1 make px4_sitl gz_interceptor
-# 另一个终端：
-python3 scripts/setpoint_replay.py \
-    --ulg data/flight_logs/x500_truth.ulg \
-    --output-dir results/sp_round1
-
-# 4. 提取 ULG 并对比
-python3 scripts/extract_ulg.py <interceptor_ulg> --output-dir results/sp_round1/interceptor_csv
-python3 scripts/compare.py results/x500_truth_csv results/sp_round1/interceptor_csv \
-    --output-dir results/sp_round1
-
-# 5. 查看收敛趋势
-python3 scripts/sensitivity.py results/sp_experiments.json
-```
-
----
-
-## 高速场景验证：50 m/s 截击机动力学辨识
+## 10. 高速场景验证：50 m/s 截击机动力学辨识
 
 前面的实验在低速（<15 m/s）场景下验证了方法的有效性。但对于高速截击机（目标速度 50 m/s），高速下的气动效应会显著改变动力学特性。这一节通过创建高性能（T/W≈8）模型，验证 IMU-based 系统辨识方法在 0-50 m/s 全速域的适用性。
 
-### 高性能模型设计
+### 10.1 高性能模型设计
 
 为模拟真实截击机的推重比和气动特性，创建了 `x500_hp` 模型：
 
@@ -638,11 +563,13 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 | MPC_XY_VEL_MAX | 12 m/s | 50 m/s | 4.2× |
 | MPC_TILTMAX_AIR | 45° | 75° | 1.7× |
 
-### 多速度段飞行测试
+### 10.2 多速度段飞行测试
 
 飞行剖面包含：悬停基线 → sysid doublets → 5/15/30/50 m/s 前飞 → 各速度段减速制动 → 着陆。最高实测速度达到 **50.5 m/s**。
 
-### k_f 辨识结果：全速域精度
+![高速飞行综合分析：包含速度剖面、电机指令、k_f 随速度变化、气动阻力估计等多维度数据。](/images/drone-dynamics/highspeed_comprehensive.png)
+
+### 10.3 k_f 辨识结果：全速域精度
 
 | 速度段 | 辨识 k_f | 真值 k_f | 误差 |
 |--------|---------|---------|------|
@@ -654,6 +581,8 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 | 25-40 m/s | 2.92×10⁻⁵ | 2.73×10⁻⁵ | +6.8% |
 | 40-60 m/s | 2.99×10⁻⁵ | 2.73×10⁻⁵ | +9.6% |
 
+![k_f 辨识精度随速度段的变化：10-25 m/s 为最佳辨识区间，误差仅 3-4%。](/images/drone-dynamics/hp_50ms_kf_vs_speed.png)
+
 **关键发现：**
 
 1. **最佳辨识区间在 10-25 m/s**，误差仅 3-4%。这是因为中等速度下电机工作在线性区间，气动效应可控
@@ -661,14 +590,14 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 3. **高速段略偏**（+9.6%）：50 m/s 下气动阻力显著，简单的 `F = k_f × ω²` 模型不再精确——实际推力被阻力消耗了一部分
 4. **整体 15% 误差可通过中速段数据校准修正**：实际工程中建议采用 10-25 m/s 段的 k_f 作为最终参数
 
-### 气动阻力辨识
+### 10.4 气动阻力辨识
 
 通过分析不同速度下的水平推力-速度关系，估计了 Gazebo 中设定的线性阻力系数：
 
 - **线性阻力系数 Cd_linear**: 0.302（Gazebo 设定值 0.3，辨识误差 <1%）
 - **验证速度范围**: 3-50.5 m/s
 
-### Setpoint Replay 高速验证
+### 10.5 Setpoint Replay 高速验证
 
 使用 50 m/s 飞行日志的 setpoint 回放到同一 HP 模型：
 
@@ -677,89 +606,17 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 | R² | 0.906 | 0.967 | 0.941 | 0.112 |
 | RMSE | 45.5 m | 71.4 m | 4.8 m | 14.7 m/s |
 
+![高速 setpoint replay 位置对比：相对位置 R² > 0.9，轨迹整体形状高度一致。](/images/drone-dynamics/hp_replay_position.png)
+
+![高速 setpoint replay 速度对比：速度 R² 较低主要因为加减速时序存在微小偏移。](/images/drone-dynamics/hp_replay_velocity.png)
+
 相对位置 R² > 0.9 表明轨迹整体形状高度一致。速度 R² 较低主要因为飞行剖面中的加减速时序存在微小偏移——在 50 m/s 下，0.5 秒的时序差即可产生 25 m 的位移误差。
 
-### 方法论总结
-
-综合低速和高速实验，推荐的高速截击机动力学建模验证流程为：
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Step 1: 物理测量                                       │
-│    → 质量（称重）、惯性矩（摆测/CAD）                      │
-│    → 电机推力曲线（推力台）或厂家数据                       │
-├─────────────────────────────────────────────────────────┤
-│  Step 2: 飞行试验 + ULG 记录                            │
-│    → 多速度段飞行（悬停→5→15→30→50 m/s）                 │
-│    → 包含 doublet 激励（增加辨识信噪比）                   │
-├─────────────────────────────────────────────────────────┤
-│  Step 3: IMU-based k_f 辨识（重点使用 10-25 m/s 段）     │
-│    → az_measured = -k_f × Σ(ωᵢ²) / m                   │
-│    → 同时辨识气动阻力系数 Cd                              │
-├─────────────────────────────────────────────────────────┤
-│  Step 4: Setpoint Replay 验证                           │
-│    → 将真值 ULG 的指令回放到仿真中                        │
-│    → 比较轨迹一致性（R²、RMSE）                          │
-├─────────────────────────────────────────────────────────┤
-│  Step 5: 迭代修正                                       │
-│    → RMSE 超标？调整参数 → 回到 Step 4                    │
-│    → R² > 0.9 + k_f 误差 < 5%？验收通过                  │
-└─────────────────────────────────────────────────────────┘
-```
-
-> 动力学验证没有捷径，但有方法。IMU-based 系统辨识 + 设定点回放，让你在纯仿真中建立与实机验证完全一致的工具链。即使在 50 m/s 高速场景下，k_f 辨识精度仍可达 5% 以内，为高速截击机的仿真开发提供了坚实的动力学基础。
-
 ---
 
-## 模型适用性说明：x500 不是你的截击机
+## 11. 方法论的能力边界：能修什么、不能修什么
 
-读到这里，读者可能会问：你们用的 x500（包括 x500_hp）能代替我的真实截击机吗？
-
-**答案是：不能。x500/x500_hp 是方法验证平台，不是任何特定截击机的数字孪生。**
-
-### 实验中各模型的角色定位
-
-| 模型 | 角色 | 目的 |
-|------|------|------|
-| x500 | 孪生实验的"真值端" | 提供参数已知的基准飞行数据 |
-| interceptor | 孪生实验的"待校准端" | 验证参数偏差→辨识→修正的闭环流程 |
-| x500_hp | 高速验证平台 | 验证方法论在 50 m/s 高速域仍然有效 |
-
-这三个模型存在的意义是**验证方法论本身**——证明 setpoint replay + k_f 辨识 + 迭代修正这套流程能工作。它们不替代任何一架真实飞机。
-
-### PX4 生态中没有高速多旋翼模型
-
-截至 PX4 v1.16，官方 Gazebo 仓库的全部多旋翼仅有 x500 一个基础型号（所有 x500_depth、x500_lidar 等变体动力学参数完全相同）。社区曾明确提出 racer/高速模型需求（[PX4-SITL_gazebo #729](https://github.com/PX4/PX4-SITL_gazebo/issues/729)），官方回复"No there is no racer model"，至今未解决。VTOL 模型（standard_vtol、quadtailsitter）虽然能高速飞行，但靠的是固定翼升力模式，与纯多旋翼截击机的飞行原理完全不同。
-
-本文创建的 x500_hp（T/W≈8、50 m/s）实际上是 **PX4 生态中唯一可用的高速纯多旋翼仿真模型**。
-
-### x500_hp 与真实截击机的差距
-
-| 维度 | x500_hp | 真实截击机 | 影响 |
-|------|---------|-----------|------|
-| 质量 | 2.0 kg | 2-5 kg（含载荷） | 参数替换即可 |
-| 惯性矩 | SDF 默认值 | 取决于质量分布 | 必须实测或 CAD 计算 |
-| 臂长 | 0.174 m | 因机型而异 | 影响力矩臂 |
-| 机身外形 | 开放式 X 框架 | 紧凑流线型 | 阻力面积 CdA 不同 |
-| 阻力模型 | 线性 velocity_decay | F_drag = ½ρCdAv²（非线性） | **高速差距最大** |
-| 电机特性 | 理想 F = k_f·ω² | 有饱和、温升、效率曲线 | 高油门段偏差 |
-| 螺旋桨 | 通用 13" | 专用高速桨 | 推力系数完全不同 |
-
-### 正确的使用方式
-
-本文提供的是**方法论 + 工具链**，不是某一架飞机的参数。读者拿到自己的截击机后：
-
-1. **以 x500_hp 的 SDF 结构为模板**：不需要从零建模，修改参数即可
-2. **替换为实测参数**：mass（称重）、k_f（推力台）、inertia（摆测/CAD）、臂长（直接测量）
-3. **用本文的 setpoint replay 工具链做验证和修正**
-
-方法论是模型无关的——不管你飞的是 x500 还是自研截击机，setpoint replay + k_f 辨识 + 迭代修正的流程完全一样。
-
----
-
-## 方法论的能力边界：能修什么、不能修什么
-
-### 参数误差 vs 结构误差
+### 11.1 参数误差 vs 结构误差
 
 模型的"不准"分两个层面，本文的方法论对它们的处理能力完全不同：
 
@@ -781,7 +638,7 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 
 **结构误差的例子**：模型用线性阻力 `F_drag = c·v`，但真实阻力是 `F_drag = ½ρCdA·v²`。50 m/s 时线性模型的阻力被低估约 2.5 倍——无论怎么调 k_f 和 c，都不可能让仿真同时在 10 m/s 和 50 m/s 上跟真值匹配。
 
-### 我们的实验数据恰好揭示了这一点
+### 11.2 高速实验数据恰好揭示了这一点
 
 高速实验中 k_f 辨识误差随速度的变化模式是一个关键的诊断信号：
 
@@ -795,7 +652,7 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 
 **这不是辨识方法的失败，而是它的诊断价值**——告诉你"这个速度段的模型结构需要改进"。
 
-### 遇到结构误差怎么办
+### 11.3 遇到结构误差怎么办
 
 当 k_f 辨识出现速度依赖性时，有三个改进方向：
 
@@ -803,7 +660,7 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 2. **分速度段标定**：在不同速度区间使用不同的等效 k_f，本质上是用分段线性逼近非线性系统
 3. **添加入流效应修正**：高前飞速度下桨盘推力衰减（advance ratio 效应），需要修正推力模型为 F = k_f·ω²·η(V_∞)，其中 η 是前飞速度 V_∞ 的递减函数
 
-### 工程实践中的判据
+### 11.4 工程实践中的判据
 
 | 指标 | 参数误差主导 | 结构误差主导 |
 |------|------------|------------|
@@ -816,9 +673,55 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 
 ---
 
-## 外场截击机建模路线图
+## 12. 模型适用性说明：x500 不是你的截击机
 
-如果你的目标是为一架真实截击机建立高精度仿真模型，以下是完整的工程路径：
+读到这里，读者可能会问：你们用的 x500（包括 x500_hp）能代替我的真实截击机吗？
+
+**答案是：不能。x500/x500_hp 是方法验证平台，不是任何特定截击机的数字孪生。**
+
+### 12.1 实验中各模型的角色定位
+
+| 模型 | 角色 | 目的 |
+|------|------|------|
+| x500 | 孪生实验的"真值端" | 提供参数已知的基准飞行数据 |
+| interceptor | 孪生实验的"待校准端" | 验证参数偏差→辨识→修正的闭环流程 |
+| x500_hp | 高速验证平台 | 验证方法论在 50 m/s 高速域仍然有效 |
+
+这三个模型存在的意义是**验证方法论本身**——证明 setpoint replay + k_f 辨识 + 迭代修正这套流程能工作。它们不替代任何一架真实飞机。
+
+### 12.2 PX4 生态中没有高速多旋翼模型
+
+截至 PX4 v1.16，官方 Gazebo 仓库的全部多旋翼仅有 x500 一个基础型号（所有 x500_depth、x500_lidar 等变体动力学参数完全相同）。社区曾明确提出 racer/高速模型需求（[PX4-SITL_gazebo #729](https://github.com/PX4/PX4-SITL_gazebo/issues/729)），官方回复"No there is no racer model"，至今未解决。VTOL 模型（standard_vtol、quadtailsitter）虽然能高速飞行，但靠的是固定翼升力模式，与纯多旋翼截击机的飞行原理完全不同。
+
+本文创建的 x500_hp（T/W≈8、50 m/s）实际上是 **PX4 生态中唯一可用的高速纯多旋翼仿真模型**。
+
+### 12.3 x500_hp 与真实截击机的差距
+
+| 维度 | x500_hp | 真实截击机 | 影响 |
+|------|---------|-----------|------|
+| 质量 | 2.0 kg | 2-5 kg（含载荷） | 参数替换即可 |
+| 惯性矩 | SDF 默认值 | 取决于质量分布 | 必须实测或 CAD 计算 |
+| 臂长 | 0.174 m | 因机型而异 | 影响力矩臂 |
+| 机身外形 | 开放式 X 框架 | 紧凑流线型 | 阻力面积 CdA 不同 |
+| 阻力模型 | 线性 velocity_decay | F_drag = ½ρCdAv²（非线性） | **高速差距最大** |
+| 电机特性 | 理想 F = k_f·ω² | 有饱和、温升、效率曲线 | 高油门段偏差 |
+| 螺旋桨 | 通用 13" | 专用高速桨 | 推力系数完全不同 |
+
+### 12.4 正确的使用方式
+
+本文提供的是**方法论 + 工具链**，不是某一架飞机的参数。读者拿到自己的截击机后：
+
+1. **以 x500_hp 的 SDF 结构为模板**：不需要从零建模，修改参数即可
+2. **替换为实测参数**：mass（称重）、k_f（推力台）、inertia（摆测/CAD）、臂长（直接测量）
+3. **用本文的 setpoint replay 工具链做验证和修正**
+
+方法论是模型无关的——不管你飞的是 x500 还是自研截击机，setpoint replay + k_f 辨识 + 迭代修正的流程完全一样。
+
+---
+
+## 13. 外场截击机建模路线图
+
+如果你的目标是为一架真实截击机建立高精度仿真模型，以下是完整的工程路径。
 
 ### Phase 1：物理测量（不需要飞行）
 
@@ -830,6 +733,8 @@ python3 scripts/sensitivity.py results/sp_experiments.json
 | 电机推力系数 k_f | 单电机推力台 | ±3% | 称重传感器 + ESC |
 | 电机力矩系数 k_m | 推力台同时测反扭矩 | ±5% | 扭矩传感器 |
 | 臂长 | 直接测量 | ±1 mm | 卷尺 |
+
+本实验证明推力系数是最敏感的参数（贡献 ~39% 的 RMSE 下降），所以推力台测试应排在最高优先级。质量影响第二大（贡献 ~15% 的 Vz RMSE 下降）。惯性矩和电机时间常数在设定点回放层面不可观测（被控制器遮蔽），但对高速大机动场景仍然重要，建议用摆振测试直接测量。
 
 ### Phase 2：创建 SDF 模型
 
@@ -879,3 +784,86 @@ x500_hp 的 model.sdf（模板）
 | Phase 5 | 仿真-实飞速度 RMSE < 2 m/s | 回到 Phase 4 修正 |
 
 > 本文建立的全部工具（k_f 辨识脚本、setpoint replay、RMSE/R² 对比、收敛分析）在 Phase 3-5 中可以直接复用，无需修改。这正是从一开始就选择"方法论验证"而非"特定机型建模"的原因。
+
+---
+
+## 14. 代码仓库与复现
+
+仓库地址：[github.com/goodisok/gazebo-px4-sim](https://github.com/goodisok/gazebo-px4-sim)
+
+```
+gazebo-px4-sim/
+├── PX4-Autopilot/                      # PX4 v1.16.1（.gitignore，需自行克隆）
+├── px4_custom/                         # PX4 中新增的自定义文件
+│   ├── models/interceptor/             # interceptor SDF 模型
+│   └── airframes/4050_gz_interceptor
+├── scripts/
+│   ├── fly_mission.py                  # x500 真值数据采集
+│   ├── setpoint_replay.py             # ★ 设定点回放（核心实验脚本）
+│   ├── extract_ulg.py                 # ULG → CSV
+│   ├── compare.py                     # 时间对齐 + RMSE/R² + 对比图
+│   ├── sensitivity.py                 # 多轮收敛分析
+│   ├── sp_convergence_analysis.py     # 4 维收敛图生成
+│   ├── update_interceptor_params.py   # 命令行修改 SDF 参数
+│   ├── run_setpoint_replay_all_rounds.sh  # 4 轮自动化脚本
+│   ├── openloop_replay.py            # 开环回放（实验证伪用）
+│   ├── create_hp_model.py            # 创建高性能 x500_hp 模型
+│   ├── fly_multispeed.py             # 多速度段飞行测试（0-50 m/s）
+│   ├── fly_sysid_maneuver.py         # 系统辨识激励机动
+│   ├── imu_sysid.py                  # IMU-based k_f 辨识
+│   ├── analyze_sysid_results.py      # 高速飞行分析
+│   ├── comprehensive_analysis.py     # 全速域综合分析
+│   ├── compare_ulg.py               # ULG 直接对比
+│   ├── compare_replay_aligned.py     # 对齐后 replay 对比
+│   ├── run_full_experiment.py        # 高速实验自动化（Python）
+│   └── run_highspeed_experiment.sh   # 高速实验自动化（Shell）
+├── worlds/
+│   └── openloop.sdf                   # 独立 Gazebo world（开环实验用）
+├── data/flight_logs/                   # ULG 日志（.gitignore）
+├── results/
+│   ├── sp_round1/ ~ sp_round4/        # ★ 4 轮设定点回放结果
+│   ├── highspeed/                     # ★ 高速实验结果（0-50 m/s）
+│   │   ├── analysis_x500/            #   x500 基准分析
+│   │   ├── analysis_hp_*/            #   HP 模型各速度段分析
+│   │   ├── comprehensive/            #   全速域综合分析
+│   │   ├── replay_aligned/           #   对齐后 replay 对比
+│   │   └── setpoint_replay_*/        #   高速 replay 结果
+│   ├── sysid_analysis/               # 系统辨识结果
+│   ├── sp_experiments.json
+│   └── x500_truth_csv/
+└── README.md
+```
+
+### 复现步骤
+
+```bash
+# 1. 采集 x500 真值数据
+cd PX4-Autopilot
+HEADLESS=1 make px4_sitl gz_x500
+# 另一个终端：
+python3 scripts/fly_mission.py
+
+# 2. 设定点回放（自动化 4 轮）
+bash scripts/run_setpoint_replay_all_rounds.sh
+
+# 3. 或手动单轮：修改参数 → 启动仿真 → 回放
+python3 scripts/update_interceptor_params.py --mass 2.3 --motorConstant 7.01e-06
+cd PX4-Autopilot && HEADLESS=1 make px4_sitl gz_interceptor
+# 另一个终端：
+python3 scripts/setpoint_replay.py \
+    --ulg data/flight_logs/x500_truth.ulg \
+    --output-dir results/sp_round1
+
+# 4. 提取 ULG 并对比
+python3 scripts/extract_ulg.py <interceptor_ulg> --output-dir results/sp_round1/interceptor_csv
+python3 scripts/compare.py results/x500_truth_csv results/sp_round1/interceptor_csv \
+    --output-dir results/sp_round1
+
+# 5. 查看收敛趋势
+python3 scripts/sensitivity.py results/sp_experiments.json
+
+# 6. 高速实验（x500_hp 模型，需要先创建）
+python3 scripts/create_hp_model.py
+python3 scripts/run_full_experiment.py
+python3 scripts/comprehensive_analysis.py
+```
