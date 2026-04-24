@@ -47,7 +47,7 @@ tags:
 
 ### 1.2 实验架构：设定点回放
 
-```mermaid
+{% mermaid %}
 graph TD
     A["<b>Step 1: 采集</b><br/>Gazebo+PX4 · x500（真值飞机）<br/>fly_mission.py → 标准机动序列"]
     A -->|"输出 x500_truth.ulg<br/>提取 trajectory_setpoint"| B
@@ -55,7 +55,7 @@ graph TD
     B -->|"输出 interceptor_roundN.ulg"| C
     C["<b>Step 3: 对比</b><br/>compare.py → 时间对齐 → RMSE / R² → 对比图"]
     C -->|"修正参数，重复 Step 2-3"| B
-```
+{% endmermaid %}
 
 **关键设计决策**：为什么不用"同脚本"方式（两架飞机跑同一个 `fly_mission.py`），而是用设定点回放？
 
@@ -415,14 +415,14 @@ Yaw RMSE 在所有轮次中都保持在 46-66° 的高水平，这**不是模型
 
 ULG 日志中记录了 PX4 控制链路各层的数据：
 
-```mermaid
+{% mermaid %}
 graph TD
     A["飞手 / 自主任务"] --> B
     B["<b>层级 3</b>：位置/速度设定点<br/>← trajectory_setpoint <b>← 本文使用</b>"]
     B --> C["<b>层级 2</b>：姿态/推力设定点<br/>← vehicle_attitude_setpoint"]
     C --> D["<b>层级 1</b>：执行器输出<br/>← actuator_motors <b>← 理论金标准</b>"]
     D --> E["电机 → 螺旋桨 → 气动力 → 飞机运动"]
-```
+{% endmermaid %}
 
 层级 1（执行器回放）是**理论金标准**——同样的电机指令，实机飞出什么轨迹、仿真飞出什么轨迹，差别就是纯动力学模型的误差，完全绕过了控制器差异。
 
@@ -514,13 +514,13 @@ graph TD
 
 ### 9.3 推荐的移植路径
 
-```mermaid
+{% mermaid %}
 graph LR
     A["<b>仿真开发 ✅</b><br/>（本文）<br/>参数调好了"] --> B["<b>扩展仿真包线</b><br/>加风场/传感器噪声<br/>高速机动测试"]
     B --> C["<b>HIL 验证</b><br/>飞控硬件实时性<br/>计算约束验证"]
     C --> D["<b>低速实飞</b><br/>用 setpoint_replay<br/>验证动力学匹配度"]
     D --> E["<b>逐步扩包线</b><br/>每步都对比<br/>仿真 vs 实飞"]
-```
+{% endmermaid %}
 
 **本文建立的 setpoint_replay 工具链在第 4 步（低速实飞验证）中可以直接使用**——这正是从一开始就选择设定点回放方法的原因。但前面三步不能跳过。
 
@@ -747,7 +747,7 @@ bash scripts/run_gobi_v2_sitl.sh
 
 模型的"不准"分两个层面，本文的方法论对它们的处理能力完全不同：
 
-```mermaid
+{% mermaid %}
 graph LR
     subgraph "参数误差 Parametric Error"
         P["k_f 偏了、mass 不对、inertia 猜错了<br/><b>✅ 本文方法可直接修正</b><br/>辨识 + 迭代 → 收敛到真值 ±5%"]
@@ -755,7 +755,7 @@ graph LR
     subgraph "结构误差 Structural Error"
         S["推力模型假设不对、阻力公式形式错了、缺少物理效应<br/><b>❌ 无法通过调参消除</b><br/><b>✅ 但可以被检测和诊断出来</b>"]
     end
-```
+{% endmermaid %}
 
 **参数误差的例子**：k_f 设成了 3.0e-5 但真值是 2.73e-5。IMU 辨识能把它找回来——因为物理公式 `a_z = (4·k_f·ω²)/m - g` 的结构是对的，只是系数偏了。
 
@@ -864,14 +864,14 @@ graph LR
 
 ### Phase 2：创建 SDF 模型
 
-```mermaid
+{% mermaid %}
 graph TD
     T["x500_hp 的 model.sdf（模板）"] --> M["替换 mass、inertia<br/>← Phase 1 实测值"]
     T --> K["替换 motorConstant<br/>← Phase 1 推力台 k_f"]
     T --> KM["替换 momentConstant<br/>← Phase 1 推力台 k_m"]
     T --> R["调整 rotor joint 位置<br/>← Phase 1 臂长"]
     T --> D["添加阻力模型（可选）<br/>← 风洞数据或初始估计"]
-```
+{% endmermaid %}
 
 ### Phase 3：低速飞行验证（0-15 m/s）
 
@@ -892,13 +892,13 @@ graph TD
 
 ### Phase 5：算法部署
 
-```mermaid
+{% mermaid %}
 graph TD
     V["仿真验证通过（R² > 0.9 全速域）"] --> W["添加风场模型 → 鲁棒性验证"]
     V --> S["添加传感器噪声 → 感知误差验证"]
     V --> H["HIL 测试 → 飞控硬件实时性"]
     V --> F["外场低速试飞 → 逐步扩包线"]
-```
+{% endmermaid %}
 
 ### 每个阶段的验收标准
 
